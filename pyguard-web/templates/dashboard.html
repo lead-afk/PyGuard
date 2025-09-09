@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PyGuard Dashboard</title>
+    <meta name="api-base" content="{{ api_base }}" />
+    <meta name="access-token" content="{{ access_token }}" />
+    <link rel="stylesheet" href="/static/style.css" />
+    <style>
+      body,
+      html {
+        height: 100%;
+        background-image: url("/static/img/background.jpg");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+      }
+      .top-bar {
+        max-width: 1750px;
+        margin: 14px auto 0;
+        border-radius: 18px;
+        background: #101922;
+        padding: 10px 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid #1f2c38;
+        box-shadow: 0 4px 16px -6px rgba(0, 0, 0, 0.55);
+      }
+      .top-bar .logo-title img.logo-small {
+        width: 42px;
+      }
+      .top-bar .logo-title h1 {
+        font-size: 22px;
+      }
+      .island-wrapper {
+        max-width: 1750px;
+        margin: 22px auto 40px;
+        padding: 0 18px;
+      }
+      .island {
+        position: relative;
+        background: #0d141a;
+        border: 1px solid #1e2a36;
+        border-radius: 26px;
+        padding: 34px 46px 46px;
+        min-height: 560px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+        box-shadow: 0 10px 40px -12px rgba(0, 0, 0, 0.65),
+          0 0 0 1px #182430 inset;
+        transition: all 0.5s cubic-bezier(0.4, 0.18, 0.21, 1);
+        overflow: hidden;
+      }
+      #island {
+        /* opacity: 0.97; */
+        background-color: #182430f8;
+        /* backdrop-filter: blur(6px); */
+      }
+      .island.expanded {
+        padding: 28px 30px 40px;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 34px;
+      }
+      .interfaces-panel {
+        width: 100%;
+        transition: all 0.5s cubic-bezier(0.4, 0.18, 0.21, 1);
+        position: relative;
+      }
+      .island.expanded .interfaces-panel {
+        width: 270px;
+        padding: 26px 20px 32px;
+        background: #101d27;
+        border: 1px solid #1f2c38;
+        border-radius: 26px;
+        box-shadow: 0 0 0 1px #16222c inset, 0 8px 28px -14px #000;
+        display: flex;
+        flex-direction: column;
+      }
+      .interfaces-panel h3 {
+        margin: 0 0 14px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6fa8dc;
+      }
+      .iface-list {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+      .iface-item {
+        cursor: pointer;
+        padding: 10px 14px;
+        font-size: 14px;
+        color: #cfd8dc;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: space-between;
+        margin: 6px 4px 0;
+        background: #15202a;
+        border: 1px solid #1f2c38;
+        border-radius: 10px;
+        transition: background 0.25s, border-color 0.25s, transform 0.25s;
+      }
+      .iface-item:hover {
+        background: #1d2c38;
+      }
+      .iface-item.active {
+        background: #27455e;
+        color: #fff;
+        border-color: #335d7a;
+      }
+      /* removed status-dot in favor of pills */
+      .details-region {
+        display: none;
+        flex-direction: column;
+        gap: 22px;
+        position: relative;
+        flex: 1;
+        min-width: 0;
+      }
+      .island.expanded .details-region {
+        display: flex;
+        margin-left: 0;
+      }
+      .details-region.peer-open .peer-detail-panel {
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: auto;
+      }
+      .iface-meta-card {
+        background: #101d27;
+        border: 1px solid #1f2c38;
+        border-radius: 16px;
+        padding: 18px 22px 20px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 28px;
+        position: relative;
+        overflow: hidden;
+        min-height: 100px;
+      }
+      /* remove gray overlay for consistency with other sections */
+      .iface-meta-card:before {
+        display: none;
+      }
+      /* add a little more space under the server name */
+      .iface-meta-left h2 {
+        margin: 0 0 14px;
+        font-size: 22px;
+        letter-spacing: 0.5px;
+      }
+      .iface-stats {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #a7bac6;
+      }
+      .iface-stat {
+        background: #182733;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid #243744;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 110px;
+      }
+      .iface-stat span.label {
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 1px;
+        color: #6fa8dc;
+      }
+      .iface-actions {
+        display: flex;
+        gap: 10px;
+      }
+      .iface-actions button {
+        padding: 10px 14px;
+        font-size: 13px;
+        border-radius: 10px;
+      }
+      .peers-section {
+        background: #101d27;
+        border: 1px solid #1f2c38;
+        border-radius: 22px;
+        padding: 20px 24px 26px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        position: relative;
+      }
+      .peers-layout {
+        display: flex;
+        gap: 26px;
+        align-items: flex-start;
+      }
+      .peers-left {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .peer-detail-panel {
+        width: 500px;
+        flex-shrink: 0;
+        background: #15222c;
+        border: 1px solid #20313f;
+        border-radius: 18px;
+        padding: 20px 24px 26px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        box-shadow: 0 0 0 1px #1f2c38 inset, 0 8px 26px -12px #000;
+        position: relative;
+        opacity: 0;
+        transform: translateX(40px);
+        transition: all 0.35s ease;
+        pointer-events: none;
+        max-height: 100%;
+        overflow: auto;
+      }
+      .peer-detail-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .peer-detail-header h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .peer-fields {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        font-size: 12px;
+      }
+      .peer-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .peer-field label {
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 1px;
+        color: #6fa8dc;
+      }
+      .peer-field input,
+      .peer-field textarea {
+        background: #0f181f;
+        border: 1px solid #24323d;
+        color: #d5e2e9;
+        padding: 8px 10px;
+        border-radius: 8px;
+        font-size: 12px;
+        width: 100%;
+        resize: vertical;
+        font-family: monospace;
+        letter-spacing: 0.4px;
+      }
+      /* Dual traffic fields (force grid to avoid overlap) */
+      .peer-field.dual-traffic {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        align-items: start;
+      }
+      .peer-field.dual-traffic .traffic-col {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .peer-field.dual-traffic input {
+        width: 100%;
+        box-sizing: border-box;
+      }
+      #detailPublicKey {
+        font-size: 11px;
+      }
+      .peer-field input[readonly],
+      .peer-field textarea[readonly] {
+        opacity: 0.85;
+      }
+      .download-btn {
+        background: #1f3a4d;
+        border: 1px solid #31566f;
+        color: #d9e6ed;
+        padding: 8px 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .download-btn:hover {
+        background: #274a63;
+      }
+      .cog-btn {
+        background: #1f3a4d;
+        border: 1px solid #31566f;
+        color: #d9e6ed;
+        padding: 10px 14px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .cog-btn:hover {
+        background: #274a63;
+      }
+      .status-pill {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        border: 1px solid transparent;
+        vertical-align: middle;
+      }
+      .status-pill.ok {
+        background: #113820;
+        color: #9cf0b7;
+        border-color: #2e6b41;
+      }
+      .status-pill.bad {
+        background: #3a1b1b;
+        color: #ffb3b3;
+        border-color: #6b2e2e;
+      }
+      .status-pill.small {
+        font-size: 10px;
+        padding: 1px 6px;
+      }
+      .peers-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .peers-section-header h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .peer-search {
+        background: #162633;
+        border: 1px solid #223444;
+        color: #d5e2e9;
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        width: 220px;
+      }
+      .peer-list {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      }
+      .peer-row {
+        padding: 12px 14px 14px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #cfd8dc;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: #15202a;
+        border: 1px solid #1f2c38;
+        border-radius: 14px;
+        transition: background 0.25s, border-color 0.25s;
+        position: relative;
+      }
+      .peer-row:hover {
+        background: #1d2c38;
+      }
+      .peer-row.active {
+        background: #27455e;
+        border-color: #335d7a;
+      }
+      .peer-row .line1 {
+        display: flex;
+        justify-content: space-between;
+        font-weight: 500;
+      }
+      .peer-row .line2 {
+        font-size: 11px;
+        color: #90a4ae;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .empty-state {
+        font-size: 13px;
+        color: #7f95a1;
+        padding: 10px 4px;
+      }
+      #peerEditor {
+        display: none !important;
+      }
+      /* Add Peer modal */
+      .peer-add-btn {
+        width: 38px;
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        font-weight: 600;
+        padding: 0;
+        border-radius: 12px;
+        background: #1d2a34;
+        border: 1px solid #2a3a48;
+        color: #d8e4ec;
+      }
+      .peer-add-btn:hover {
+        background: #243643;
+      }
+      .peer-modal-overlay {
+        position: fixed;
+        inset: 0;
+        backdrop-filter: blur(6px);
+        background: rgba(10, 15, 20, 0.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 900;
+      }
+      .peer-modal {
+        background: #0f181f;
+        border: 1px solid #22323f;
+        border-radius: 20px;
+        padding: 30px 34px 32px;
+        width: 400px;
+        max-width: 92%;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        box-shadow: 0 20px 60px -20px #000, 0 0 0 1px #18242e inset;
+      }
+      .peer-modal h3 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: 0.5px;
+      }
+      .pm-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .pm-field label {
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #6fa8dc;
+      }
+      .pm-field input {
+        background: #132028;
+        border: 1px solid #243541;
+        color: #d9e5ec;
+        padding: 12px 14px;
+        border-radius: 10px;
+        font-size: 14px;
+      }
+      .pm-field input:focus {
+        outline: 2px solid #335d7a;
+        outline-offset: 1px;
+      }
+      .pm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 14px;
+        margin-top: 6px;
+      }
+      .btn-danger {
+        background: linear-gradient(135deg, #4d1b21, #2a0d11);
+        border: 1px solid #682b33;
+        color: #f2d8da;
+        box-shadow: 0 0 0 0 rgba(255, 70, 70, 0.25);
+      }
+      .btn-danger:hover {
+        background: linear-gradient(135deg, #5d2027, #351017);
+        box-shadow: 0 0 12px -2px rgba(255, 70, 70, 0.35);
+      }
+      .btn-danger:active {
+        transform: translateY(1px);
+      }
+      .peer-modal-close {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: #1d2a34;
+        border: 1px solid #2a3a48;
+        color: #9fb3bf;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        font-size: 18px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .peer-modal-close:hover {
+        background: #27455e;
+        color: #fff;
+      }
+      @media (max-width: 960px) {
+        @media (max-width: 1100px) {
+          .island.expanded {
+            flex-direction: column;
+          }
+          .island.expanded .interfaces-panel {
+            width: 100%;
+            border-right: none;
+            border-top: 1px solid #1f2c38;
+            border-radius: 0 0 26px 26px;
+            box-shadow: none;
+            padding: 20px 18px 26px;
+            margin-top: 12px;
+          }
+          .island.expanded .details-region {
+            margin-left: 0;
+          }
+          .peers-layout {
+            flex-direction: column;
+          }
+          .peer-detail-panel {
+            width: 100%;
+            transform: translateY(20px);
+            max-height: none;
+          }
+        }
+        .peer-list {
+          grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top-bar">
+      <div class="logo-title">
+        <img
+          src="/static/img/logo-transparent.png"
+          class="logo-small"
+          alt="PyGuard"
+        />
+        <h1>PyGuard</h1>
+      </div>
+      <div
+        class="top-bar-right"
+        style="display: flex; align-items: center; gap: 14px"
+      >
+        <span
+          id="current-interface-label"
+          style="font-size: 12px; color: #90a4ae"
+        ></span>
+        <a class="logout" href="/logout">Logout</a>
+      </div>
+    </div>
+    <div class="island-wrapper">
+      <div class="island" id="island">
+        <div class="interfaces-panel" id="interfacesPanel">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 8px;
+            "
+          >
+            <h3>Interfaces</h3>
+            <button
+              id="btnOpenAddInterface"
+              class="peer-add-btn btn-pop"
+              title="Add Interface"
+            >
+              +
+            </button>
+          </div>
+          <div class="iface-list" id="interfacesContainer"></div>
+        </div>
+        <div class="details-region" id="detailsRegion">
+          <div
+            class="details-col"
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 24px;
+              flex: 1;
+              min-width: 0;
+            "
+          >
+            <div class="iface-meta-card" id="serverMetaCard">
+              <div class="iface-meta-left">
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <h2 id="ifaceTitle" style="margin: 0">Select an interface</h2>
+                  <span
+                    id="ifaceActivePill"
+                    class="status-pill bad"
+                    style="display: none"
+                    >inactive</span
+                  >
+                </div>
+                <div class="iface-stats" id="ifaceStats"></div>
+              </div>
+              <div class="iface-actions">
+                <button id="btnRefresh" class="cog-btn" title="Refresh">
+                  Refresh
+                </button>
+                <button
+                  id="btnEnableService"
+                  class="cog-btn"
+                  title="Enable service"
+                >
+                  Enable
+                </button>
+                <button
+                  id="btnDisableService"
+                  class="cog-btn"
+                  title="Disable service"
+                >
+                  Disable
+                </button>
+                <button
+                  id="btnServerSettings"
+                  class="cog-btn"
+                  title="Edit server"
+                >
+                  Edit
+                </button>
+                <button
+                  id="btnDeleteInterface"
+                  class="btn-danger"
+                  title="Delete Interface"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+            <div class="peers-section">
+              <div class="peers-layout">
+                <div class="peers-left">
+                  <div class="peers-section-header">
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <h3>Peers</h3>
+                      <span
+                        class="saving-indicator"
+                        id="peerLoading"
+                        style="display: none; font-size: 12px; color: #90a4ae"
+                        >Loading...</span
+                      >
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px">
+                      <button
+                        id="btnOpenAddPeer"
+                        class="peer-add-btn btn-pop"
+                        title="Add Peer"
+                      >
+                        +
+                      </button>
+                      <input
+                        id="peerSearch"
+                        class="peer-search"
+                        type="text"
+                        placeholder="Search"
+                      />
+                    </div>
+                  </div>
+                  <div id="peersContainer" class="peer-list"></div>
+                  <div class="empty-state" id="emptyState">
+                    Select peer to display details.
+                  </div>
+                </div>
+                <div class="peer-detail-panel" id="peerDetailPanel">
+                  <div class="peer-detail-header" style="gap: 10px">
+                    <h3 id="peerDetailTitle" style="flex: 1">Peer</h3>
+                    <span
+                      id="peerDetailStatusPill"
+                      class="status-pill small"
+                      style="display: none"
+                      >offline</span
+                    >
+                    <div
+                      class="peer-detail-actions"
+                      style="display: flex; gap: 8px"
+                    >
+                      <button
+                        class="download-btn"
+                        id="btnDeletePeer"
+                        title="Delete peer"
+                      >
+                        Delete
+                      </button>
+                      <button
+                        class="download-btn"
+                        id="btnEditPeer"
+                        title="Edit peer"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        class="download-btn"
+                        id="btnQrPeer"
+                        title="Show QR code"
+                      >
+                        QR
+                      </button>
+                      <button
+                        class="download-btn"
+                        id="btnDownloadPeer"
+                        title="Download peer config"
+                      >
+                        Download
+                      </button>
+                    </div>
+                  </div>
+                  <div class="peer-fields" id="peerFields">
+                    <div class="peer-field">
+                      <label>Public Key</label
+                      ><input id="detailPublicKey" readonly />
+                    </div>
+                    <div class="peer-field">
+                      <label>IP</label><input id="detailIP" readonly />
+                    </div>
+                    <div class="peer-field dual-traffic">
+                      <div class="traffic-col">
+                        <label>Download</label
+                        ><input id="detailDownload" readonly />
+                      </div>
+                      <div class="traffic-col">
+                        <label>Upload</label
+                        ><input id="detailUpload" readonly />
+                      </div>
+                    </div>
+                    <div class="peer-field">
+                      <label>Last Handshake</label
+                      ><input id="detailHandshake" readonly />
+                    </div>
+                    <div class="peer-field">
+                      <label>Config</label
+                      ><textarea id="detailConfig" rows="8" readonly></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="toast" id="toast"></div>
+    <div id="addInterfaceModal" style="display: none"></div>
+    <div id="addPeerModal" style="display: none"></div>
+    <div id="qrPeerModal" style="display: none"></div>
+    <div id="editPeerModal" style="display: none"></div>
+    <div id="deletePeerModal" style="display: none"></div>
+    <script>
+      const apiBase = document.querySelector('meta[name="api-base"]').content;
+      const token = document.querySelector('meta[name="access-token"]').content;
+      console.log("[PyGuard] Dashboard script start. apiBase=", apiBase);
+      if (!token) console.warn("[PyGuard] Missing access token meta");
+      const headers = () => ({
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      });
+      const interfacesContainer = document.getElementById(
+        "interfacesContainer"
+      );
+      const ifaceTitle = document.getElementById("ifaceTitle");
+      const ifaceMeta = document.getElementById("ifaceStats");
+      const ifaceActivePill = document.getElementById("ifaceActivePill");
+      const islandEl = document.getElementById("island");
+      const peersContainer = document.getElementById("peersContainer");
+      const peerLoading = document.getElementById("peerLoading");
+      const emptyState = document.getElementById("emptyState");
+      const peerDetailPanel = document.getElementById("peerDetailPanel");
+      const peerDetailTitle = document.getElementById("peerDetailTitle");
+      const peerDetailStatusPill = document.getElementById(
+        "peerDetailStatusPill"
+      );
+      const btnDownloadPeer = document.getElementById("btnDownloadPeer");
+      const btnEditPeer = document.getElementById("btnEditPeer");
+      const btnQrPeer = document.getElementById("btnQrPeer");
+      const detailPublicKey = document.getElementById("detailPublicKey");
+      const detailIP = document.getElementById("detailIP");
+      const detailDownload = document.getElementById("detailDownload");
+      const detailUpload = document.getElementById("detailUpload");
+      const detailHandshake = document.getElementById("detailHandshake");
+      const detailConfig = document.getElementById("detailConfig");
+      let serverNetwork = "";
+      // Optional (editor not yet rendered in current template revision)
+      const peerEditor = document.getElementById("peerEditor");
+      const peerForm = document.getElementById("peerForm");
+      const peerEditorTitle = document.getElementById("peerEditorTitle");
+      const dirtyFlag = document.getElementById("dirtyFlag");
+      const toastEl = document.getElementById("toast");
+      const peerSearch = document.getElementById("peerSearch");
+      const btnRefresh = document.getElementById("btnRefresh");
+      const btnAddPeer = document.getElementById("btnAddPeer");
+      const btnEnableService = document.getElementById("btnEnableService");
+      const btnDisableService = document.getElementById("btnDisableService");
+      const btnDeletePeer = document.getElementById("btnDeletePeer");
+      const btnDeleteInterface = document.getElementById("btnDeleteInterface");
+      const btnCancelEdit = document.getElementById("btnCancelEdit");
+      let currentInterface = null;
+      let peers = [];
+      let originalPeerData = null;
+      let currentPeerPublicKey = null;
+      let currentPeerName = null;
+      let peerDetailInterval = null;
+      let lastPeerDetail = null;
+      let interfaceRefreshInterval = null;
+      let interfacesListInterval = null;
+      function clearInterfaceRefreshInterval() {
+        if (interfaceRefreshInterval) {
+          clearInterval(interfaceRefreshInterval);
+          interfaceRefreshInterval = null;
+        }
+      }
+      function clearInterfacesListInterval() {
+        if (interfacesListInterval) {
+          clearInterval(interfacesListInterval);
+          interfacesListInterval = null;
+        }
+      }
+      function clearPeerDetailInterval() {
+        if (peerDetailInterval) {
+          clearInterval(peerDetailInterval);
+          peerDetailInterval = null;
+        }
+      }
+      function showToast(msg, ok = true) {
+        toastEl.textContent = msg;
+        toastEl.style.background = ok ? "#263844" : "#b71c1c";
+        toastEl.classList.add("show");
+        setTimeout(() => toastEl.classList.remove("show"), 2800);
+      }
+      async function fetchJSON(url, opts = {}) {
+        try {
+          const res = await fetch(url, opts);
+          if (res.status === 401) {
+            window.location = "/";
+            return null;
+          }
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.detail || res.statusText);
+          return data;
+        } catch (e) {
+          showToast(e.message, false);
+          throw e;
+        }
+      }
+      let interfacesFetchInFlight = false;
+      function isPeerOnlineFromRuntime(runtime) {
+        if (!runtime) return null;
+        const s = runtime.last_handshake_str;
+        if (!s) return null;
+        if (/never/i.test(s)) return false;
+        if (
+          typeof runtime.last_handshake === "number" &&
+          runtime.last_handshake > 600
+        )
+          return false;
+        return true;
+      }
+      async function loadInterfaces() {
+        if (interfacesFetchInFlight) return;
+        interfacesFetchInFlight = true;
+        let data;
+        try {
+          data = await fetchJSON(`${apiBase}/interfaces`, {
+            headers: headers(),
+          });
+        } catch (e) {
+          console.error("Failed loading interfaces", e);
+          interfacesFetchInFlight = false;
+          return;
+        }
+        if (!data) {
+          interfacesFetchInFlight = false;
+          return;
+        }
+        const list = data.interfaces || [];
+        // Build desired order and metadata
+        const desired = list
+          .map((obj) => ({
+            name: obj && typeof obj === "object" ? obj.name : obj,
+            active: obj && typeof obj === "object" ? !!obj.active : false,
+          }))
+          .filter((x) => !!x.name);
+
+        // Build a map of existing elements
+        const existing = new Map();
+        Array.from(interfacesContainer.querySelectorAll(".iface-item")).forEach(
+          (el) => {
+            const n = el.dataset.name;
+            if (n) existing.set(n, el);
+          }
+        );
+
+        // Remove elements that no longer exist
+        existing.forEach((el, n) => {
+          if (!desired.find((d) => d.name === n)) {
+            el.remove();
+            existing.delete(n);
+          }
+        });
+
+        // Ensure each desired item exists and update classes/content minimally
+        desired.forEach(({ name, active }) => {
+          let el = existing.get(name);
+          if (!el) {
+            el = document.createElement("div");
+            el.className = "iface-item";
+            el.dataset.name = name;
+            el.onclick = () => selectInterface(name);
+            el.innerHTML = `<span class="iface-name"></span><span class="iface-pill status-pill small"></span>`;
+            existing.set(name, el);
+          }
+          // selection class
+          el.classList.toggle("active", name === currentInterface);
+          // name text
+          const nameSpan = el.querySelector(".iface-name");
+          if (nameSpan && nameSpan.textContent !== name)
+            nameSpan.textContent = name;
+          // status pill
+          const pill = el.querySelector(".iface-pill");
+          if (pill) {
+            pill.classList.toggle("ok", !!active);
+            pill.classList.toggle("bad", !active);
+            pill.textContent = active ? "active" : "inactive";
+            pill.title = active ? "Active" : "Inactive";
+          }
+        });
+
+        // Reorder DOM to match desired order without full re-render
+        desired.forEach(({ name }) => {
+          const el = existing.get(name);
+          if (el) interfacesContainer.appendChild(el);
+        });
+
+        // If no interfaces, show a placeholder once
+        if (
+          !desired.length &&
+          !interfacesContainer.querySelector(".iface-empty")
+        ) {
+          const ph = document.createElement("div");
+          ph.className = "iface-empty";
+          ph.style.cssText = "padding:14px 16px;font-size:12px;color:#78909c;";
+          ph.textContent = "No interfaces";
+          interfacesContainer.appendChild(ph);
+        } else if (desired.length) {
+          const ph = interfacesContainer.querySelector(".iface-empty");
+          if (ph) ph.remove();
+        }
+        interfacesFetchInFlight = false;
+      }
+      async function selectInterface(iface) {
+        clearPeerDetailInterval();
+        clearInterfaceRefreshInterval();
+        currentInterface = iface;
+        document
+          .querySelectorAll(".iface-item")
+          .forEach((i) =>
+            i.classList.toggle("active", i.dataset.name === iface)
+          );
+        ifaceTitle.textContent = iface;
+        ifaceMeta.innerHTML = "";
+        peersContainer.innerHTML = "";
+        emptyState.style.display = "block";
+        islandEl.classList.add("expanded");
+        await loadInterfaceAll();
+        // Start periodic refresh of interface peers/status every 5s
+        interfaceRefreshInterval = setInterval(async () => {
+          try {
+            await loadInterfaceAll();
+          } catch (_) {}
+        }, 5000);
+      }
+      async function loadInterfaceAll() {
+        if (!currentInterface) return;
+        peerLoading.style.display = "inline";
+        try {
+          const data = await fetchJSON(
+            `${apiBase}/interfaces/${encodeURIComponent(currentInterface)}`,
+            { headers: headers() }
+          );
+          if (!data) return;
+          const s = data.server || {};
+          serverNetwork = s.network || "";
+          const isActive = !!data.active;
+          // Update active pill next to interface name
+          if (ifaceActivePill) {
+            ifaceActivePill.style.display = "inline-block";
+            ifaceActivePill.classList.toggle("ok", isActive);
+            ifaceActivePill.classList.toggle("bad", !isActive);
+            ifaceActivePill.textContent = isActive ? "active" : "inactive";
+          }
+          let peersData = data.peers || {};
+          if (typeof peersData === "string") {
+            try {
+              const parsed = JSON.parse(peersData);
+              // legacy format may wrap in { peers: {..} }
+              if (parsed && parsed.peers && typeof parsed.peers === "object")
+                peersData = parsed.peers;
+              else peersData = parsed;
+            } catch (e) {
+              console.warn("Failed to parse peers JSON string", e);
+              peersData = {};
+            }
+          }
+          const peerNames = Object.keys(peersData);
+          const peerCount = data.peer_count ?? peerNames.length;
+          const stats = [
+            { label: "Network", value: s.network || "-" },
+            { label: "relay ip", value: s.ip || "—" },
+            { label: "Port", value: s.port || "-" },
+            { label: "Peers", value: peerCount },
+            { label: "Public IP", value: s.public_ip || "—" },
+          ];
+          ifaceMeta.innerHTML = stats
+            .map(
+              (st) =>
+                `<div class="iface-stat"><span class="label">${st.label}</span><span>${st.value}</span></div>`
+            )
+            .join("");
+          peers = peerNames.map((name) => {
+            const info = peersData[name] || {};
+            return {
+              public_key: info.public_key || name, // in case we add later
+              name,
+              active: !!info.active,
+              last_handshake: info.last_handshake || null,
+              last_handshake_str: info.last_handshake_str || "",
+              download: info.download || "0 KiB",
+              uploaded: info.uploaded || "0 KiB",
+            };
+          });
+          console.debug("Loaded peers (with status)", peers);
+          renderPeerList();
+        } finally {
+          peerLoading.style.display = "none";
+        }
+      }
+      function renderPeerList() {
+        const q = peerSearch.value.trim().toLowerCase();
+        peersContainer.innerHTML = "";
+        const filtered = peers.filter(
+          (p) =>
+            !q ||
+            p.name.toLowerCase().includes(q) ||
+            (p.public_key || "").toLowerCase().includes(q)
+        );
+        if (!filtered.length) {
+          peersContainer.innerHTML =
+            '<div style="padding:16px;font-size:12px;color:#78909c;">No peers</div>';
+          return;
+        }
+        filtered.forEach((p) => {
+          const el = document.createElement("div");
+          el.className =
+            "peer-row" +
+            (p.public_key === currentPeerPublicKey ? " active" : "");
+          const pill = `<span class=\"status-pill small ${
+            p.active ? "ok" : "bad"
+          }\" title=\"${p.active ? "Online" : "Offline"}\">${
+            p.active ? "online" : "offline"
+          }</span>`;
+          el.innerHTML = `<div class="line1"><span style="display:flex;align-items:center;gap:6px;"><span>${
+            p.name
+          }</span></span><span>${pill}</span></div><div class="line2"><span>${(
+            p.public_key || ""
+          ).slice(0, 14)}...</span><span>D:${p.download} U:${
+            p.uploaded
+          }</span></div>`;
+          el.onclick = () => openPeer(p.public_key || p.name);
+          peersContainer.appendChild(el);
+        });
+      }
+      async function openPeer(pub) {
+        const p = peers.find((x) => x.public_key === pub);
+        if (!p) return;
+        currentPeerPublicKey = pub;
+        currentPeerName = p.name;
+        clearPeerDetailInterval();
+        document
+          .querySelectorAll(".peer-row")
+          .forEach((r) =>
+            r.classList.toggle(
+              "active",
+              r.textContent.includes(pub.slice(0, 14))
+            )
+          );
+        if (emptyState) emptyState.style.display = "none";
+        if (peerEditor) peerEditor.style.display = "block";
+        if (peerEditorTitle) peerEditorTitle.textContent = `Peer: ${p.name}`;
+        if (peerDetailPanel)
+          islandEl.querySelector(".details-region")?.classList.add("peer-open");
+        // Fetch detailed peer info
+        try {
+          const detail = await fetchJSON(
+            `${apiBase}/interfaces/${encodeURIComponent(
+              currentInterface
+            )}/peers/${encodeURIComponent(p.name)}`,
+            { headers: headers() }
+          );
+          if (detail && detail.peer_data) {
+            const d = detail.peer_data;
+            lastPeerDetail = detail;
+            if (peerForm) {
+              if (peerForm.peerName) peerForm.peerName.value = p.name;
+              if (peerForm.peerAddress) peerForm.peerAddress.value = d.ip || "";
+              if (peerForm.peerAllowedIPs)
+                peerForm.peerAllowedIPs.value = d.allowed_ips || "";
+              if (peerForm.peerEndpoint)
+                peerForm.peerEndpoint.value = d.endpoint || "";
+              if (peerForm.peerPersistentKeepalive)
+                peerForm.peerPersistentKeepalive.value =
+                  d.persistent_keepalive || "";
+              if (peerForm.peerDNS) peerForm.peerDNS.value = "";
+              if (peerForm.peerPrivateKey) peerForm.peerPrivateKey.value = "";
+              if (peerForm.peerNotes) peerForm.peerNotes.value = d.notes || "";
+            }
+            // Read-only meta fields
+            const pubKeyEl = document.getElementById("peerPublicKey");
+            const serverEpEl = document.getElementById("serverEndpoint");
+            if (pubKeyEl)
+              pubKeyEl.value =
+                d.public_key || detail.public_key || p.public_key || "";
+            const ep = detail.server_endpoint_host
+              ? `${detail.server_endpoint_host}:${
+                  detail.server_port || ""
+                }`.replace(/:$/, "")
+              : "";
+            if (serverEpEl) serverEpEl.value = ep;
+            // Populate panel
+            if (peerDetailPanel) {
+              peerDetailTitle.textContent = p.name;
+              detailPublicKey.value = d.public_key || p.public_key || "";
+              detailIP.value = d.ip || "";
+              const runtime = detail.runtime || {};
+              detailDownload.value = runtime.rx_human || p.download || "";
+              detailUpload.value = runtime.tx_human || p.uploaded || "";
+              detailHandshake.value = runtime.last_handshake_str
+                ? runtime.last_handshake_str
+                : p.last_handshake_str || "—";
+              detailConfig.value =
+                detail.config_text || detail.peer_config || "";
+              btnDownloadPeer.onclick = () =>
+                downloadPeerConfig(
+                  p.name,
+                  detail.config_text || detail.peer_config || ""
+                );
+              // update detail status pill
+              const online =
+                isPeerOnlineFromRuntime(runtime) ?? p.active ? true : false;
+              if (peerDetailStatusPill) {
+                peerDetailStatusPill.style.display = "inline-block";
+                peerDetailStatusPill.classList.toggle("ok", online);
+                peerDetailStatusPill.classList.toggle("bad", !online);
+                peerDetailStatusPill.textContent = online
+                  ? "online"
+                  : "offline";
+                peerDetailStatusPill.title = online ? "Online" : "Offline";
+              }
+            }
+          } else {
+            lastPeerDetail = null;
+            if (peerForm) {
+              if (peerForm.peerName) peerForm.peerName.value = p.name;
+              if (peerForm.peerAddress) peerForm.peerAddress.value = "";
+              if (peerForm.peerAllowedIPs) peerForm.peerAllowedIPs.value = "";
+              if (peerForm.peerEndpoint) peerForm.peerEndpoint.value = "";
+              if (peerForm.peerPersistentKeepalive)
+                peerForm.peerPersistentKeepalive.value = "";
+              if (peerForm.peerDNS) peerForm.peerDNS.value = "";
+              if (peerForm.peerPrivateKey) peerForm.peerPrivateKey.value = "";
+              if (peerForm.peerNotes) peerForm.peerNotes.value = "";
+            }
+            const pubKeyEl = document.getElementById("peerPublicKey");
+            const serverEpEl = document.getElementById("serverEndpoint");
+            if (pubKeyEl) pubKeyEl.value = p.public_key || "";
+            if (serverEpEl) serverEpEl.value = "";
+            if (peerDetailPanel) {
+              peerDetailTitle.textContent = p.name;
+              detailPublicKey.value = p.public_key || "";
+              detailIP.value = "";
+              detailDownload.value = p.download || "";
+              detailUpload.value = p.uploaded || "";
+              detailHandshake.value = p.last_handshake_str || "—";
+              detailConfig.value = "";
+              btnDownloadPeer.onclick = () => showToast("No config yet", false);
+              if (peerDetailStatusPill) {
+                peerDetailStatusPill.style.display = "inline-block";
+                peerDetailStatusPill.classList.toggle("ok", !!p.active);
+                peerDetailStatusPill.classList.toggle("bad", !p.active);
+                peerDetailStatusPill.textContent = p.active
+                  ? "online"
+                  : "offline";
+                peerDetailStatusPill.title = p.active ? "Online" : "Offline";
+              }
+            }
+          }
+        } catch (e) {
+          /* toast already shown */
+        }
+        originalPeerData = serializeForm();
+        if (dirtyFlag) dirtyFlag.style.display = "none";
+        // Start periodic refresh (every 5s)
+        peerDetailInterval = setInterval(
+          () => refreshCurrentPeerRuntime(),
+          5000
+        );
+      }
+      async function refreshCurrentPeerRuntime() {
+        if (!currentInterface || !currentPeerName) return;
+        try {
+          const detail = await fetchJSON(
+            `${apiBase}/interfaces/${encodeURIComponent(
+              currentInterface
+            )}/peers/${encodeURIComponent(currentPeerName)}`,
+            { headers: headers() }
+          );
+          if (!detail || !detail.peer_data) return;
+          const runtime = detail.runtime || {};
+          // Update peer detail panel fields if still selected
+          if (peerDetailTitle.textContent.trim() === currentPeerName) {
+            // traffic + handshake
+            detailDownload.value =
+              runtime.rx_human ||
+              detail.peer_data.download ||
+              detail.peer_data.transfer_rx_bytes_human ||
+              "";
+            detailUpload.value =
+              runtime.tx_human ||
+              detail.peer_data.uploaded ||
+              detail.peer_data.transfer_tx_bytes_human ||
+              "";
+            detailHandshake.value =
+              runtime.last_handshake_str ||
+              detail.peer_data.last_handshake_str ||
+              "—";
+          }
+          // Update peers array entry & list row
+          const idx = peers.findIndex((pr) => pr.name === currentPeerName);
+          if (idx >= 0) {
+            peers[idx].last_handshake_str =
+              runtime.last_handshake_str || peers[idx].last_handshake_str;
+            // Reconstruct download/upload from runtime if available (choose rx/tx_human or keep previous)
+            if (runtime.rx_human && runtime.tx_human) {
+              peers[idx].download = runtime.rx_human;
+              peers[idx].uploaded = runtime.tx_human;
+            }
+            peers[idx].active = runtime.last_handshake_str
+              ? !/never/i.test(runtime.last_handshake_str) &&
+                !(runtime.last_handshake && runtime.last_handshake > 600)
+              : peers[idx].active;
+          }
+          // Update DOM row for current peer
+          const rows = peersContainer.querySelectorAll(".peer-row");
+          rows.forEach((row) => {
+            const nameEl = row.querySelector(".line1 span span");
+            if (nameEl && nameEl.textContent === currentPeerName) {
+              const line2 = row.querySelector(".line2");
+              if (line2) {
+                const peerObj = peers[idx];
+                line2.innerHTML = `<span>${(peerObj.public_key || "").slice(
+                  0,
+                  14
+                )}...</span><span>D:${peerObj.download} U:${
+                  peerObj.uploaded
+                }</span>`;
+              }
+              const pillEl = row.querySelector(".status-pill");
+              if (pillEl) {
+                pillEl.classList.toggle("ok", peers[idx].active);
+                pillEl.classList.toggle("bad", !peers[idx].active);
+                pillEl.textContent = peers[idx].active ? "online" : "offline";
+                pillEl.title = peers[idx].active ? "Online" : "Offline";
+              }
+            }
+          });
+          // Update detail header pill as well
+          const online =
+            isPeerOnlineFromRuntime(runtime) ?? peers[idx]?.active
+              ? true
+              : false;
+          if (peerDetailStatusPill) {
+            peerDetailStatusPill.style.display = "inline-block";
+            peerDetailStatusPill.classList.toggle("ok", online);
+            peerDetailStatusPill.classList.toggle("bad", !online);
+            peerDetailStatusPill.textContent = online ? "online" : "offline";
+            peerDetailStatusPill.title = online ? "Online" : "Offline";
+          }
+        } catch (e) {
+          /* ignore refresh errors */
+        }
+      }
+      function downloadPeerConfig(name, text) {
+        if (!text) {
+          showToast("Config empty", false);
+          return;
+        }
+        const blob = new Blob([text], { type: "text/plain" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${name}.conf`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 1200);
+        showToast("Config downloaded");
+      }
+      function serializeForm() {
+        if (!peerForm) return {};
+        return {
+          name: peerForm.peerName?.value.trim() || "",
+          address: peerForm.peerAddress?.value.trim() || "",
+          allowed_ips: peerForm.peerAllowedIPs?.value.trim() || "",
+          endpoint: peerForm.peerEndpoint?.value.trim() || "",
+          persistent_keepalive:
+            peerForm.peerPersistentKeepalive?.value.trim() || "",
+          dns: peerForm.peerDNS?.value.trim() || "",
+          private_key: peerForm.peerPrivateKey?.value.trim() || "",
+          notes: peerForm.peerNotes?.value.trim() || "",
+        };
+      }
+      function detectDirty() {
+        if (!peerForm || !originalPeerData || !dirtyFlag) return;
+        const now = serializeForm();
+        const dirty = Object.keys(now).some(
+          (k) => now[k] !== originalPeerData[k]
+        );
+        dirtyFlag.style.display = dirty ? "inline" : "none";
+      }
+      if (peerForm) {
+        peerForm.addEventListener("input", detectDirty);
+        peerForm.addEventListener("submit", (e) => {
+          e.preventDefault();
+          showToast("Peer save not implemented yet", false);
+        });
+      }
+      // Delete peer modal wiring
+      const deletePeerModalMount = document.getElementById("deletePeerModal");
+      function buildDeletePeerModal(name) {
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="dpmClose" aria-label="Close">×</button>\n    <h3>Delete Peer</h3>\n    <div style="font-size:14px;color:#cfd8dc;">Are you sure you want to delete peer <b>${name}</b>?</div>\n    <div id="dpmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; margin-top:8px;"></div>\n    <div class="pm-actions">\n      <button type="button" id="dpmCancel" class="btn-danger btn-press">Cancel</button>\n      <button type="button" id="dpmDelete" class="btn-glow">Delete</button>\n    </div>\n  </div>\n</div>`;
+      }
+      async function openDeletePeerModal() {
+        if (!currentInterface || !currentPeerName) {
+          showToast("Select a peer first", false);
+          return;
+        }
+        deletePeerModalMount.innerHTML = buildDeletePeerModal(currentPeerName);
+        deletePeerModalMount.style.display = "block";
+        const overlay = deletePeerModalMount.querySelector(
+          ".peer-modal-overlay"
+        );
+        const btnClose = deletePeerModalMount.querySelector("#dpmClose");
+        const btnCancel = deletePeerModalMount.querySelector("#dpmCancel");
+        const btnGo = deletePeerModalMount.querySelector("#dpmDelete");
+        const feedback = deletePeerModalMount.querySelector("#dpmFeedback");
+        function close() {
+          deletePeerModalMount.style.display = "none";
+          deletePeerModalMount.innerHTML = "";
+        }
+        btnClose.onclick = close;
+        btnCancel.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        btnGo.onclick = async () => {
+          feedback.style.color = "#a0b4c0";
+          feedback.textContent = "Deleting...";
+          try {
+            const res = await fetch(
+              `${apiBase}/interfaces/${encodeURIComponent(
+                currentInterface
+              )}/peers/${encodeURIComponent(currentPeerName)}`,
+              { method: "DELETE", headers: headers() }
+            );
+            if (!res.ok) {
+              const d = await res.json().catch(() => ({}));
+              throw new Error(d.detail || res.statusText);
+            }
+            close();
+            showToast("Peer deleted");
+            clearPeerDetailInterval();
+            currentPeerPublicKey = null;
+            currentPeerName = null;
+            lastPeerDetail = null;
+            const detailsRegion = islandEl.querySelector(".details-region");
+            if (detailsRegion) detailsRegion.classList.remove("peer-open");
+            // Refresh peers
+            await loadInterfaceAll();
+          } catch (err) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = `Error: ${err.message || "Delete failed"}`;
+          }
+        };
+      }
+      if (btnDeletePeer) btnDeletePeer.onclick = openDeletePeerModal;
+      if (btnDeleteInterface)
+        btnDeleteInterface.onclick = () =>
+          showToast("Interface deletion not implemented yet", false);
+      if (btnEnableService)
+        btnEnableService.onclick = async () => {
+          if (!currentInterface) {
+            showToast("Select an interface first", false);
+            return;
+          }
+          try {
+            const res = await fetchJSON(
+              `${apiBase}/interfaces/${encodeURIComponent(
+                currentInterface
+              )}/service/enable`,
+              { method: "POST", headers: headers() }
+            );
+            // Update interface list using returned data if present
+            if (res && Array.isArray(res.data)) {
+              // Minimal: force a refresh by rebuilding with returned list
+              // Build a fake response to feed existing loadInterfaces logic
+              const list = res.data;
+              // Update DOM directly similar to loadInterfaces diff routine
+              const desired = list
+                .map((obj) => ({
+                  name: obj && typeof obj === "object" ? obj.name : obj,
+                  active: obj && typeof obj === "object" ? !!obj.active : false,
+                }))
+                .filter((x) => !!x.name);
+              const existing = new Map();
+              Array.from(
+                interfacesContainer.querySelectorAll(".iface-item")
+              ).forEach((el) => {
+                const n = el.dataset.name;
+                if (n) existing.set(n, el);
+              });
+              existing.forEach((el, n) => {
+                if (!desired.find((d) => d.name === n)) {
+                  el.remove();
+                  existing.delete(n);
+                }
+              });
+              desired.forEach(({ name, active }) => {
+                let el = existing.get(name);
+                if (!el) {
+                  el = document.createElement("div");
+                  el.className = "iface-item";
+                  el.dataset.name = name;
+                  el.onclick = () => selectInterface(name);
+                  el.innerHTML = `<span class="iface-name"></span><span class="iface-pill status-pill small"></span>`;
+                  existing.set(name, el);
+                }
+                el.classList.toggle("active", name === currentInterface);
+                const nameSpan = el.querySelector(".iface-name");
+                if (nameSpan && nameSpan.textContent !== name)
+                  nameSpan.textContent = name;
+                const pill = el.querySelector(".iface-pill");
+                if (pill) {
+                  pill.classList.toggle("ok", !!active);
+                  pill.classList.toggle("bad", !active);
+                  pill.textContent = active ? "active" : "inactive";
+                  pill.title = active ? "Active" : "Inactive";
+                }
+              });
+              desired.forEach(({ name }) => {
+                const el = existing.get(name);
+                if (el) interfacesContainer.appendChild(el);
+              });
+            } else {
+              await loadInterfaces();
+            }
+            // Also refresh current interface summary to update active pill
+            await loadInterfaceAll();
+            showToast("Service enabled");
+          } catch (e) {
+            /* toast already shown */
+          }
+        };
+      if (btnDisableService)
+        btnDisableService.onclick = async () => {
+          if (!currentInterface) {
+            showToast("Select an interface first", false);
+            return;
+          }
+          try {
+            const res = await fetchJSON(
+              `${apiBase}/interfaces/${encodeURIComponent(
+                currentInterface
+              )}/service/disable`,
+              { method: "POST", headers: headers() }
+            );
+            if (res && Array.isArray(res.data)) {
+              const list = res.data;
+              const desired = list
+                .map((obj) => ({
+                  name: obj && typeof obj === "object" ? obj.name : obj,
+                  active: obj && typeof obj === "object" ? !!obj.active : false,
+                }))
+                .filter((x) => !!x.name);
+              const existing = new Map();
+              Array.from(
+                interfacesContainer.querySelectorAll(".iface-item")
+              ).forEach((el) => {
+                const n = el.dataset.name;
+                if (n) existing.set(n, el);
+              });
+              existing.forEach((el, n) => {
+                if (!desired.find((d) => d.name === n)) {
+                  el.remove();
+                  existing.delete(n);
+                }
+              });
+              desired.forEach(({ name, active }) => {
+                let el = existing.get(name);
+                if (!el) {
+                  el = document.createElement("div");
+                  el.className = "iface-item";
+                  el.dataset.name = name;
+                  el.onclick = () => selectInterface(name);
+                  el.innerHTML = `<span class=\"iface-name\"></span><span class=\"iface-pill status-pill small\"></span>`;
+                  existing.set(name, el);
+                }
+                el.classList.toggle("active", name === currentInterface);
+                const nameSpan = el.querySelector(".iface-name");
+                if (nameSpan && nameSpan.textContent !== name)
+                  nameSpan.textContent = name;
+                const pill = el.querySelector(".iface-pill");
+                if (pill) {
+                  pill.classList.toggle("ok", !!active);
+                  pill.classList.toggle("bad", !active);
+                  pill.textContent = active ? "active" : "inactive";
+                  pill.title = active ? "Active" : "Inactive";
+                }
+              });
+              desired.forEach(({ name }) => {
+                const el = existing.get(name);
+                if (el) interfacesContainer.appendChild(el);
+              });
+            } else {
+              await loadInterfaces();
+            }
+            await loadInterfaceAll();
+            showToast("Service disabled");
+          } catch (e) {
+            /* toast already shown */
+          }
+        };
+      // Add Peer modal logic
+      const addInterfaceModalMount =
+        document.getElementById("addInterfaceModal");
+      const addPeerModalMount = document.getElementById("addPeerModal");
+      const qrPeerModalMount = document.getElementById("qrPeerModal");
+      const editPeerModalMount = document.getElementById("editPeerModal");
+      function buildAddPeerModal(ipPrefill) {
+        const allowedPrefill = serverNetwork || "";
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="pmClose" aria-label="Close">×</button>\n    <h3>Add Peer</h3>\n    <form id="pmForm" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="pmName">Peer Name</label>\n        <input id="pmName" name="name" placeholder="e.g. laptop" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="pmIP">Peer IP</label>\n        <input id="pmIP" name="ip" value="${
+          ipPrefill || ""
+        }" placeholder="Auto if blank"/>\n      </div>\n      <div class="pm-field">\n        <label for="pmAllowed">Allowed IPs</label>\n        <input id="pmAllowed" name="allowed_ips" value="${allowedPrefill}" placeholder="e.g. ${
+          allowedPrefill || "0.0.0.0/0"
+        }"/>\n      </div>\n      <div id="pmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="pmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="pmValidate" class="btn-glow">Validate</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+      }
+      async function ensureServerNetwork() {
+        // If we didn't capture the network during interface load, fetch it now.
+        if (!currentInterface || serverNetwork) return;
+        try {
+          const d = await fetchJSON(
+            `${apiBase}/interfaces/${encodeURIComponent(currentInterface)}`,
+            { headers: headers() }
+          );
+          serverNetwork = d?.server?.network || "";
+        } catch (_) {
+          /* non-fatal */
+        }
+      }
+      async function fetchNextAvailable() {
+        if (!currentInterface) return null;
+        try {
+          const d = await fetchJSON(
+            `${apiBase}/interfaces/${encodeURIComponent(
+              currentInterface
+            )}/next_available`,
+            { headers: headers() }
+          );
+          return d?.next_available_ip || null;
+        } catch {
+          return null;
+        }
+      }
+      async function openAddPeerModal() {
+        if (!currentInterface) {
+          showToast("Select an interface first", false);
+          return;
+        }
+        // Ensure we have the latest server network to prefill Allowed IPs
+        await ensureServerNetwork();
+        const ip = await fetchNextAvailable();
+        addPeerModalMount.innerHTML = buildAddPeerModal(ip);
+        addPeerModalMount.style.display = "block";
+        const overlay = addPeerModalMount.querySelector(".peer-modal-overlay");
+        const form = addPeerModalMount.querySelector("#pmForm");
+        const btnCancel = addPeerModalMount.querySelector("#pmCancel");
+        const btnClose = addPeerModalMount.querySelector("#pmClose");
+        const feedback = addPeerModalMount.querySelector("#pmFeedback");
+        const nameInput = addPeerModalMount.querySelector("#pmName");
+        const ipInput = addPeerModalMount.querySelector("#pmIP");
+        const allowedInput = addPeerModalMount.querySelector("#pmAllowed");
+        nameInput.focus();
+        function close() {
+          addPeerModalMount.style.display = "none";
+          addPeerModalMount.innerHTML = "";
+        }
+        btnCancel.onclick = close;
+        btnClose.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          feedback.style.color = "#a0b4c0";
+          feedback.textContent = "Validating...";
+          const name = nameInput.value.trim();
+          const ipVal = ipInput.value.trim();
+          if (!name) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Name required";
+            return;
+          }
+          const allowed = (allowedInput.value || "").trim();
+          const payload = ipVal ? { name, ip: ipVal } : { name };
+          if (allowed) payload.new_allowed = allowed;
+          try {
+            const res = await fetchJSON(
+              `${apiBase}/interfaces/${encodeURIComponent(
+                currentInterface
+              )}/peers/validate`,
+              {
+                method: "POST",
+                headers: headers(),
+                body: JSON.stringify(payload),
+              }
+            );
+            if (res && res.ok) {
+              feedback.style.color = "#32c861";
+              feedback.textContent = "Validated. Creating...";
+              // Build creation payload expected by API (AddPeerReq)
+              const finalIP = ipVal || ip || "";
+              const finalAllowed = allowed || serverNetwork || "";
+              if (!finalIP) {
+                feedback.style.color = "#ff6b6b";
+                feedback.textContent =
+                  "No available IP; try again or specify an IP.";
+                return;
+              }
+              if (!finalAllowed) {
+                feedback.style.color = "#ff6b6b";
+                feedback.textContent = "Allowed IPs required; fill the field.";
+                return;
+              }
+              const createBody = {
+                name,
+                peer_ip: finalIP,
+                allowed_ips: finalAllowed,
+              };
+              try {
+                const createRes = await fetch(
+                  `${apiBase}/interfaces/${encodeURIComponent(
+                    currentInterface
+                  )}/peers/add`,
+                  {
+                    method: "POST",
+                    headers: headers(),
+                    body: JSON.stringify(createBody),
+                  }
+                );
+                const createdData = await createRes.json().catch(() => ({}));
+                if (!createRes.ok) {
+                  throw new Error(
+                    createdData.detail ||
+                      createRes.statusText ||
+                      "Create failed"
+                  );
+                }
+                // Update local peers list from returned peers object
+                let peersData = createdData || {};
+                if (typeof peersData === "string") {
+                  try {
+                    peersData = JSON.parse(peersData);
+                  } catch {
+                    peersData = {};
+                  }
+                }
+                const names = Object.keys(peersData);
+                peers = names.map((n) => {
+                  const info = peersData[n] || {};
+                  return {
+                    public_key: info.public_key || n,
+                    name: n,
+                    active: !!info.active,
+                    last_handshake: info.last_handshake || null,
+                    last_handshake_str: info.last_handshake_str || "",
+                    download: info.download || "0 KiB",
+                    uploaded: info.uploaded || "0 KiB",
+                  };
+                });
+                renderPeerList();
+                // Close modal and select newly created peer
+                close();
+                showToast("Peer created");
+                const createdPeer = peers.find((p) => p.name === name);
+                if (createdPeer) {
+                  openPeer(createdPeer.public_key || createdPeer.name);
+                }
+              } catch (err) {
+                feedback.style.color = "#ff6b6b";
+                feedback.textContent = `Create failed: ${
+                  err.message || "error"
+                }`;
+              }
+            } else {
+              feedback.style.color = "#ff6b6b";
+              feedback.textContent = (res && res.detail) || "Validation failed";
+            }
+          } catch (err) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = `Error: ${
+              err.message || "Validation error"
+            }`;
+          }
+        });
+      }
+      const btnOpenAddPeer = document.getElementById("btnOpenAddPeer");
+      const btnOpenAddInterface = document.getElementById(
+        "btnOpenAddInterface"
+      );
+      if (btnOpenAddPeer)
+        btnOpenAddPeer.addEventListener("click", openAddPeerModal);
+      if (btnAddPeer) btnAddPeer.onclick = openAddPeerModal;
+      if (btnCancelEdit)
+        btnCancelEdit.onclick = () => {
+          if (originalPeerData) openPeer(currentPeerPublicKey);
+        };
+      // Add Interface modal
+      function buildAddInterfaceModal(prefill) {
+        const name = prefill?.name || "";
+        const port = prefill?.port ?? "";
+        const network = prefill?.network || "";
+        const public_ip = prefill?.public_ip || "";
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="aimClose" aria-label="Close">×</button>\n    <h3>Add Interface</h3>\n    <form id="aimForm" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="aimName">Name</label>\n        <input id="aimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPort">Port</label>\n        <input id="aimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimNetwork">Network</label>\n        <input id="aimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPublicIP">Public IP</label>\n        <input id="aimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="aimIgnore" checked />\n        <label for="aimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="aimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="aimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="aimCreate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+      }
+      async function openAddInterfaceModal() {
+        if (!addInterfaceModalMount) return;
+        let defaults = null;
+        try {
+          defaults = await fetchJSON(`${apiBase}/interfaces/defaults`, {
+            headers: headers(),
+          });
+        } catch (_) {
+          defaults = {};
+        }
+        addInterfaceModalMount.innerHTML = buildAddInterfaceModal(
+          defaults || {}
+        );
+        addInterfaceModalMount.style.display = "block";
+        const overlay = addInterfaceModalMount.querySelector(
+          ".peer-modal-overlay"
+        );
+        const btnClose = addInterfaceModalMount.querySelector("#aimClose");
+        const btnCancel = addInterfaceModalMount.querySelector("#aimCancel");
+        const form = addInterfaceModalMount.querySelector("#aimForm");
+        const feedback = addInterfaceModalMount.querySelector("#aimFeedback");
+        const nameInput = addInterfaceModalMount.querySelector("#aimName");
+        function close() {
+          addInterfaceModalMount.style.display = "none";
+          addInterfaceModalMount.innerHTML = "";
+        }
+        btnClose.onclick = close;
+        btnCancel.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        nameInput?.focus();
+        form.addEventListener("submit", (e) => {
+          e.preventDefault();
+          feedback.style.color = "#ff6b6b";
+          feedback.textContent = "Create not implemented yet";
+          // Intentionally no create logic per request
+        });
+      }
+      if (btnOpenAddInterface)
+        btnOpenAddInterface.addEventListener("click", openAddInterfaceModal);
+      // QR + Edit peer actions
+      function showQrModal(peerName) {
+        if (!currentInterface || !peerName) {
+          showToast("No peer selected", false);
+          return;
+        }
+        qrPeerModalMount.innerHTML = `<div class="peer-modal-overlay"><div class="peer-modal" style="width:460px;" role="dialog" aria-modal="true"><button class="peer-modal-close" id="qrClose">×</button><h3 style="margin-top:0;">QR Code - ${peerName}</h3><div id="qrContent" style="display:flex;justify-content:center;align-items:center;min-height:240px;">Loading...</div><div class="pm-actions" style="justify-content:flex-end;"><button class="btn-danger" type="button" id="qrDismiss">Close</button></div></div></div>`;
+        qrPeerModalMount.style.display = "block";
+        const overlay = qrPeerModalMount.querySelector(".peer-modal-overlay");
+        const closeBtn = qrPeerModalMount.querySelector("#qrClose");
+        const dismiss = qrPeerModalMount.querySelector("#qrDismiss");
+        const content = qrPeerModalMount.querySelector("#qrContent");
+        function close() {
+          qrPeerModalMount.style.display = "none";
+          qrPeerModalMount.innerHTML = "";
+        }
+        closeBtn.onclick = close;
+        dismiss.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        fetchJSON(
+          `${apiBase}/interfaces/${encodeURIComponent(
+            currentInterface
+          )}/peers/${encodeURIComponent(peerName)}/qr`,
+          { headers: headers() }
+        )
+          .then((d) => {
+            if (!d || !d.qr_png_base64) {
+              content.textContent = "Failed fetching QR";
+              return;
+            }
+            // Display QR at roughly 2x size (while preserving crisp modules)
+            content.innerHTML = `<img alt="QR for ${peerName}" style="image-rendering:pixelated;border:1px solid #22323f;padding:12px;background:#0f181f;border-radius:16px;max-width:none;width:360px;height:360px;" src="data:image/png;base64,${d.qr_png_base64}">`;
+          })
+          .catch(() => {
+            content.textContent = "Failed fetching QR";
+          });
+      }
+      if (btnQrPeer)
+        btnQrPeer.addEventListener("click", () => {
+          const name = peerDetailTitle.textContent.trim();
+          if (!name || name === "Peer") {
+            showToast("Select a peer first", false);
+            return;
+          }
+          showQrModal(name);
+        });
+      // Edit Peer modal
+      function buildEditPeerModal(prefill) {
+        const n = prefill?.name || "";
+        const ip = prefill?.ip || "";
+        const allowed = prefill?.allowed_ips || "";
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="epmClose" aria-label="Close">×</button>\n    <h3>Edit Peer</h3>\n    <form id="epmForm" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="epmName">Peer Name</label>\n        <input id="epmName" name="name" value="${n}" placeholder="peer name" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmIP">Peer IP</label>\n        <input id="epmIP" name="ip" value="${ip}" placeholder="e.g. 10.0.0.2/32"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmAllowed">Allowed IPs</label>\n        <input id="epmAllowed" name="allowed_ips" value="${allowed}" placeholder="e.g. 0.0.0.0/0, ::/0"/>\n      </div>\n      <div id="epmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="epmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="epmApply" class="btn-glow">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+      }
+      async function openEditPeerModal() {
+        if (!currentInterface || !currentPeerName) {
+          showToast("Select a peer first", false);
+          return;
+        }
+        const prefill = {
+          name: currentPeerName,
+          ip: lastPeerDetail?.peer_data?.ip || "",
+          allowed_ips: lastPeerDetail?.peer_data?.allowed_ips || "",
+        };
+        editPeerModalMount.innerHTML = buildEditPeerModal(prefill);
+        editPeerModalMount.style.display = "block";
+        const overlay = editPeerModalMount.querySelector(".peer-modal-overlay");
+        const form = editPeerModalMount.querySelector("#epmForm");
+        const btnCancel = editPeerModalMount.querySelector("#epmCancel");
+        const btnClose = editPeerModalMount.querySelector("#epmClose");
+        const feedback = editPeerModalMount.querySelector("#epmFeedback");
+        const nameInput = editPeerModalMount.querySelector("#epmName");
+        const ipInput = editPeerModalMount.querySelector("#epmIP");
+        const allowedInput = editPeerModalMount.querySelector("#epmAllowed");
+        nameInput.focus();
+        function close() {
+          editPeerModalMount.style.display = "none";
+          editPeerModalMount.innerHTML = "";
+        }
+        btnCancel.onclick = close;
+        btnClose.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          feedback.style.color = "#a0b4c0";
+          feedback.textContent = "Validating...";
+          const name = nameInput.value.trim();
+          const ipVal =
+            ipInput.value.trim() || lastPeerDetail?.peer_data?.ip || "";
+          const newAllowed = allowedInput.value.trim();
+          if (!name) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Name required";
+            return;
+          }
+          const payload = {
+            name,
+            ip: ipVal || null,
+            old_name: currentPeerName,
+            old_ip: lastPeerDetail?.peer_data?.ip || null,
+            new_allowed: newAllowed || null,
+            old_allowed: lastPeerDetail?.peer_data?.allowed_ips || null,
+          };
+          try {
+            const res = await fetchJSON(
+              `${apiBase}/interfaces/${encodeURIComponent(
+                currentInterface
+              )}/peers/validate`,
+              {
+                method: "POST",
+                headers: headers(),
+                body: JSON.stringify(payload),
+              }
+            );
+            if (res && res.ok) {
+              feedback.style.color = "#32c861";
+              feedback.textContent = "Validated. Applying changes...";
+              // Build patch body based on differences
+              const patchBody = {};
+              if (
+                newAllowed &&
+                newAllowed !== (lastPeerDetail?.peer_data?.allowed_ips || "")
+              )
+                patchBody.allowed_ips = newAllowed;
+              if (ipVal && ipVal !== (lastPeerDetail?.peer_data?.ip || ""))
+                patchBody.ip = ipVal;
+              if (name && name !== currentPeerName) patchBody.new_name = name;
+              if (Object.keys(patchBody).length === 0) {
+                feedback.textContent = "Nothing to change";
+                return;
+              }
+              const upd = await fetchJSON(
+                `${apiBase}/interfaces/${encodeURIComponent(
+                  currentInterface
+                )}/peers/${encodeURIComponent(currentPeerName)}`,
+                {
+                  method: "PATCH",
+                  headers: headers(),
+                  body: JSON.stringify(patchBody),
+                }
+              );
+              // Update peers list from returned interface summary
+              const iface = upd?.interface || {};
+              let peersData = iface.peers || {};
+              if (typeof peersData === "string") {
+                try {
+                  const parsed = JSON.parse(peersData);
+                  peersData = parsed?.peers || parsed || {};
+                } catch {
+                  peersData = {};
+                }
+              }
+              const names = Object.keys(peersData);
+              peers = names.map((n) => {
+                const info = peersData[n] || {};
+                return {
+                  public_key: info.public_key || n,
+                  name: n,
+                  active: !!info.active,
+                  last_handshake: info.last_handshake || null,
+                  last_handshake_str: info.last_handshake_str || "",
+                  download: info.download || "0 KiB",
+                  uploaded: info.uploaded || "0 KiB",
+                };
+              });
+              renderPeerList();
+              // Select corrected/renamed peer and populate detail
+              const finalName = upd?.name || name;
+              const selected = peers.find((p) => p.name === finalName);
+              close();
+              showToast("Peer updated");
+              if (selected) {
+                openPeer(selected.public_key || selected.name);
+              }
+            } else {
+              feedback.style.color = "#ff6b6b";
+              feedback.textContent = (res && res.detail) || "Validation failed";
+            }
+          } catch (err) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = `Error: ${
+              err.message || "Validation error"
+            }`;
+          }
+        });
+      }
+      if (btnEditPeer) btnEditPeer.addEventListener("click", openEditPeerModal);
+      btnRefresh.onclick = async () => {
+        await loadInterfaceAll();
+        showToast("Refreshed");
+      };
+      peerSearch.addEventListener("input", renderPeerList);
+      (async () => {
+        await loadInterfaces(); /* No auto-select; user must click an interface to expand */
+        // Start periodic refresh of interface list every 5s
+        clearInterfacesListInterval();
+        interfacesListInterval = setInterval(() => {
+          try {
+            loadInterfaces();
+          } catch (_) {}
+        }, 5000);
+      })();
+      // Logout confirmation
+      const logoutLink = document.querySelector(".logout");
+      if (logoutLink) {
+        logoutLink.addEventListener("click", (e) => {
+          const ok = window.confirm("Are you sure you want to log out?");
+          if (!ok) {
+            e.preventDefault();
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

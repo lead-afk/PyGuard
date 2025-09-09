@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+bcrypt
+PyJWT
+httpx
+Jinja2
+itsdangerous
+python-multipart
+psutil
+aiofiles

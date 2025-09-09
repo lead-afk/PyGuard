@@ -1,0 +1,918 @@
+"""Simple pyguard API starter
+
+Provides a /login endpoint which accepts JSON {username,password} and, on
+successful authentication, returns an API key (created if missing) stored at
+/etc/pyguard/api_key.
+
+Security notes:
+- This is a minimal bootstrap. Run behind TLS or bind to localhost only.
+- Create the admin username and bcrypt password hash via the helper below (CLI)
+  and save them to /etc/pyguard/admin_user and /etc/pyguard/admin.pass.hash
+  with permissions 600.
+
+Quick admin setup (run as root):
+  python3 - <<'PY'
+  import bcrypt
+  from pathlib import Path
+  u = 'admin'
+  pw = 'choose-a-strong-password'
+  Path('/etc/pyguard').mkdir(mode=0o700, exist_ok=True)
+  h = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+  Path('/etc/pyguard/admin_user').write_text(u)
+  Path('/etc/pyguard/admin.pass.hash').write_text(h)
+  import os; os.chmod('/etc/pyguard/admin_user', 0o600); os.chmod('/etc/pyguard/admin.pass.hash', 0o600)
+  print('Wrote admin user and hash to /etc/pyguard')
+  PY
+
+Run:
+  # development use only; for production run under uvicorn/gunicorn behind TLS
+  uvicorn pyguard-api:app --host 127.0.0.1 --port 8000
+
+Call:
+  curl -X POST -H "Content-Type: application/json" -d '{"username":"admin","password":"..."}' http://127.0.0.1:8000/login
+"""
+
+from pathlib import Path
+import secrets
+import os
+import stat
+from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+from pydantic import BaseModel
+import bcrypt
+import jwt
+from datetime import datetime, timedelta, timezone
+import secrets as _secrets
+
+# File locations (server-side)
+DATA_DIR = Path("/etc/pyguard")
+ADMIN_PASS_HASH_PATH = DATA_DIR / "admin.pass.hash"
+API_KEY_PATH = DATA_DIR / "api_key"
+TOKEN_EXP_SECONDS = 3600  # 1 hour
+REFRESH_TOKEN_PATH = DATA_DIR / "refresh_token"
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("pyguard-api")
+
+app = FastAPI(title="pyguard API (starter)")
+
+# CORS: allow web dashboard (localhost:6656) to call API with Authorization header
+_default_allowed_origins = [
+    "http://127.0.0.1:6656",
+    "http://10.0.0.1:6656",
+    "http://10.0.0.4:6656",
+    "http://10.0.0.5:6656",
+    "http://localhost:6656",
+    "http://0.0.0.0:6656",
+]
+
+# Allow overriding CORS origins via env (comma separated). Set PYGUARD_CORS_ORIGINS="*" to allow all (dev only).
+_env_origins = os.getenv("PYGUARD_CORS_ORIGINS")
+if _env_origins:
+    if _env_origins.strip() == "*":
+        _allow_origins = ["*"]
+    else:
+        _allow_origins = [o.strip() for o in _env_origins.split(",") if o.strip()]
+else:
+    _allow_origins = _default_allowed_origins
+
+# For convenience also allow any 127.0.0.1 / localhost port in dev unless user provided explicit list.
+_allow_origin_regex = None
+if _allow_origins == _default_allowed_origins:
+    # Accept any port on 127.0.0.1 / localhost during development.
+    _allow_origin_regex = r"http://(127\.0\.0\.1|localhost):\d+"
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allow_origins,
+    allow_origin_regex=_allow_origin_regex,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+)
+
+log.info("CORS configured: origins=%s regex=%s", _allow_origins, _allow_origin_regex)
+
+
+# Lightweight request logger (focus on Origin & path)
+@app.middleware("http")
+async def _log_origin(request: Request, call_next):
+    origin = request.headers.get("origin")
+    acrm = request.headers.get("access-control-request-method")
+    log.debug(
+        "HTTP %s %s origin=%s preflight=%s",
+        request.method,
+        request.url.path,
+        origin,
+        bool(acrm),
+    )
+    try:
+        resp = await call_next(request)
+    except Exception as e:  # ensure we always log unexpected errors
+        log.exception(
+            "Unhandled error for %s %s origin=%s",
+            request.method,
+            request.url.path,
+            origin,
+        )
+        raise
+    return resp
+
+
+@app.get("/cors-test")
+def cors_test():
+    return {"ok": True, "message": "CORS reachable"}
+
+
+class LoginReq(BaseModel):
+    password: str
+
+
+def ensure_data_dir():
+    try:
+        DATA_DIR.mkdir(mode=0o700, exist_ok=True)
+    except PermissionError:
+        # Caller may not be root during development; keep going and let reads fail
+        pass
+
+
+def load_admin_hash():
+    """Return bcrypt hash string or None if not configured."""
+    try:
+        h = ADMIN_PASS_HASH_PATH.read_text().strip()
+        if not h:
+            return None
+        return h
+    except Exception:
+        return None
+
+
+def load_api_key() -> str | None:
+    try:
+        return API_KEY_PATH.read_text().strip()
+    except Exception:
+        return None
+
+
+def save_api_key(key: str):
+    try:
+        API_KEY_PATH.write_text(key)
+        os.chmod(API_KEY_PATH, stat.S_IRUSR | stat.S_IWUSR)
+    except Exception as e:
+        raise
+
+
+def ensure_api_key() -> str:
+    """Return existing API key or create a new one and persist it."""
+    ensure_data_dir()
+    k = load_api_key()
+    if k:
+        return k
+    # generate a URL-safe token
+    k = _secrets.token_urlsafe(64)
+    save_api_key(k)
+    return k
+
+
+def load_refresh_token() -> str | None:
+    try:
+        return REFRESH_TOKEN_PATH.read_text().strip()
+    except Exception:
+        return None
+
+
+def save_refresh_token(token: str):
+    try:
+        REFRESH_TOKEN_PATH.write_text(token)
+        os.chmod(REFRESH_TOKEN_PATH, stat.S_IRUSR | stat.S_IWUSR)
+    except Exception:
+        raise
+
+
+SECRET = "super_secret_key"  # w env lub pliku
+ACCESS_EXP_SECONDS = 60 * 15
+REFRESH_EXP_SECONDS = 60 * 60 * 24
+
+
+def _issue_access_token() -> str:
+    now = datetime.utcnow()
+    payload = {
+        "iat": now,
+        "exp": now + timedelta(seconds=ACCESS_EXP_SECONDS),
+        "type": "access",
+    }
+    return jwt.encode(payload, SECRET, algorithm="HS256")
+
+
+def _issue_refresh_token() -> str:
+    now = datetime.utcnow()
+    payload = {
+        "iat": now,
+        "exp": now + timedelta(seconds=REFRESH_EXP_SECONDS),
+        "type": "refresh",
+    }
+    return jwt.encode(payload, SECRET, algorithm="HS256")
+
+
+@app.post("/login")
+def login(payload: LoginReq):
+    """Verify password and return access + refresh tokens."""
+    h_conf = load_admin_hash()
+    if not h_conf:
+        raise HTTPException(
+            status_code=500, detail="Admin password not configured on server"
+        )
+    try:
+        ok = bcrypt.checkpw(payload.password.encode(), h_conf.encode())
+    except Exception:
+        raise HTTPException(status_code=500, detail="Password verification failed")
+    if not ok:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = _issue_access_token()
+    refresh = _issue_refresh_token()
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_EXP_SECONDS,
+        "refresh_token": refresh,
+    }
+
+
+def require_jwt(authorization: str = Header(None)):
+    """Require a valid Bearer JWT signed with the server secret."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+
+    token = authorization.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, SECRET, algorithms=["HS256"])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=403, detail="Wrong token type")
+        log.debug(
+            "Auth success: token iat=%s exp=%s", payload.get("iat"), payload.get("exp")
+        )
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+
+class RefreshReq(BaseModel):
+    refresh_token: str
+
+
+@app.post("/refresh")
+def refresh(req: RefreshReq):
+    """Exchange a valid refresh token for a new short-lived access JWT."""
+    try:
+        payload = jwt.decode(req.refresh_token, SECRET, algorithms=["HS256"])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=403, detail="Wrong token type")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=403, detail="Invalid refresh token")
+
+    token = _issue_access_token()
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_EXP_SECONDS,
+    }
+
+
+@app.post("/logout")
+def logout(req: RefreshReq):
+    """Revoke the configured refresh token (if it matches the provided one)."""
+    stored = load_refresh_token()
+    if not stored:
+        return {"revoked": False}
+    if not _secrets.compare_digest(req.refresh_token, stored):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    try:
+        REFRESH_TOKEN_PATH.unlink()
+    except Exception:
+        pass
+    return {"revoked": True}
+
+
+@app.get("/status")
+def status(_payload=Depends(require_jwt)):
+    return {
+        "admin_hash_exists": ADMIN_PASS_HASH_PATH.exists(),
+        "api_key_exists": API_KEY_PATH.exists(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# PyGuard management endpoints (all require valid JWT)
+# ---------------------------------------------------------------------------
+
+# Import pyguard core functions (they enforce root internally where needed)
+try:
+    from pyguard import *
+except Exception as e:  # pragma: no cover (import failure surfaces via API error)
+    raise RuntimeError(f"Failed importing pyguard core: {e}")
+
+
+class InitInterfaceReq(BaseModel):
+    interface: str
+    port: int | None = None
+    network: str | None = None
+    public_ip: str | None = None
+
+
+class UpdateServerReq(BaseModel):
+    port: int | None = None
+    dns: str | None = None
+    public_ip: str | None = None
+    network: str | None = None
+
+
+class AddPeerReq(BaseModel):
+    name: str
+    peer_ip: str
+    allowed_ips: str
+
+
+class ValidatePeerReq(BaseModel):
+    name: str
+    ip: str | None = None
+    # Optional fields for edit validation
+    old_name: str | None = None
+    old_ip: str | None = None
+    new_allowed: str | None = None
+    old_allowed: str | None = None
+
+
+class ValidateInterface(BaseModel):
+    interface: str
+    port: int
+    network: str
+
+    ignore_range_check: bool = True
+
+    old_interface: str | None = None
+    old_port: int | None = None
+    old_network: str | None = None
+
+
+class BulkAddPeersReq(BaseModel):
+    peers: list[AddPeerReq]
+
+
+class UpdatePeerReq(BaseModel):
+    allowed_ips: str | None = None
+    ip: str | None = None
+    new_name: str | None = None
+    rotate_keys: bool = False
+
+
+class CustomCommandReq(BaseModel):
+    command: str
+
+
+def _filter_server(server: dict, include_private: bool = False) -> dict:
+    s = dict(server)
+    if not include_private and "private_key" in s:
+        s.pop("private_key")
+    return s
+
+
+@app.get("/interfaces")
+def api_list_interfaces(_=Depends(require_jwt)):
+    data = list_interfaces(as_json=True, print_output=False)
+    return {"interfaces": data}
+
+
+@app.get("/interfaces/defaults")
+def api_list_interfaces(_=Depends(require_jwt)):
+
+    name, port, network, public_ip = get_new_interface_defaults()
+
+    data = {"name": name, "port": port, "network": network, "public_ip": public_ip}
+    return data
+
+
+@app.post("/interfaces", status_code=201)
+def api_init_interface(req: InitInterfaceReq, _=Depends(require_jwt)):
+    # Basic validation
+    if not req.interface or any(c.isspace() for c in req.interface):
+        raise HTTPException(status_code=400, detail="Invalid interface name")
+    # Reuse core init (prints to stdout; ignore). We don't want CLI printouts; so just call.
+    init_server(
+        req.interface, port=req.port, network=req.network, public_ip=req.public_ip
+    )
+    d = load_data(req.interface)
+    data = list_interfaces(as_json=True, print_output=False)
+    peers_obj = get_peers_info(req.interface, as_json=False, specific_peer=None)
+    resp = {
+        "interface": req.interface,
+        "server": _filter_server(d.get("server", {})),
+        "peers": peers_obj,
+        "peer_count": len(peers_obj) if peers_obj else len(d.get("peers", {})),
+        "active": is_interface_active(req.interface),
+    }
+
+    return {"interface": req.interface, "server": _filter_server(d.get("server", {}))}
+
+
+@app.get("/interfaces/{interface}")
+def api_get_interface(interface: str, _=Depends(require_jwt)):
+    """Return interface summary + live peer status.
+
+    Returns a native dict in the `peers` field (never a JSON string).
+    """
+    path = data_path(interface)
+    if isinstance(path, str):  # normalize
+        path = Path(path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Interface not found")
+    d = load_data(interface)
+    # Get dict form (no JSON dump) so FastAPI serializes naturally
+    try:
+        peers_obj = get_peers_info(interface, as_json=False, specific_peer=None)
+        if not isinstance(peers_obj, dict):  # very defensive
+            peers_obj = {}
+    except Exception as e:
+        # Don't fail whole endpoint for peer runtime parsing issues
+        logging.exception("Failed gathering peer info for %s: %s", interface, e)
+        peers_obj = {}
+    resp = {
+        "interface": interface,
+        "server": _filter_server(d.get("server", {})),
+        "peers": peers_obj,
+        "peer_count": len(peers_obj) if peers_obj else len(d.get("peers", {})),
+        "active": is_interface_active(interface),
+    }
+    return resp
+
+
+@app.delete("/interfaces/{interface}")
+def api_delete_interface(interface: str, _=Depends(require_jwt)):
+    # Lazy import delete (avoids circular)
+    from pyguard import delete_interface
+
+    path = data_path(interface)
+    if isinstance(path, str):
+        path = Path(path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Interface not found")
+    delete_interface(interface)
+    return {"deleted": True, "interface": interface}
+
+
+@app.post("/interfaces/validate")
+def api_validate_interface(req: ValidateInterface, _=Depends(require_jwt)):
+    # Validate the interface configuration
+
+    ignore_name: bool = False
+    ignore_port: bool = False
+    ignore_network: bool = False
+    if req.old_interface and req.old_interface == req.interface:
+        ignore_name = True
+    if req.old_port and req.old_port == req.port:
+        ignore_port = True
+    if req.old_network and req.old_network == req.network:
+        ignore_network = True
+
+    ok, meta = validate_new_interface(
+        req.interface,
+        req.port,
+        req.network,
+        ignore_range_check=req.ignore_range_check,
+        ignore_name=ignore_name,
+        ignore_port=ignore_port,
+        ignore_network=ignore_network,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=meta.get("error", "Unknown error"))
+
+    return {"ok": True}
+
+
+@app.patch("/interfaces/{interface}/server")
+def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jwt)):
+    # Apply each provided field using CLI core update_config semantics
+    provided = False
+    if req.port is not None:
+        update_config(interface, "port", "port", str(req.port))
+        provided = True
+    if req.dns is not None:
+        update_config(interface, "dns", "dns", req.dns)
+        provided = True
+    if req.public_ip is not None:
+        update_config(interface, "public-ip", "public-ip", req.public_ip)
+        provided = True
+    if req.network is not None:
+        update_config(interface, "network", "network", req.network)
+        provided = True
+    if not provided:
+        raise HTTPException(status_code=400, detail="No updatable fields supplied")
+    d = load_data(interface)
+    return {"interface": interface, "server": _filter_server(d.get("server", {}))}
+
+
+@app.get("/interfaces/{interface}/next_available")
+def api_get_next_available_ip(interface: str, _=Depends(require_jwt)):
+    next = get_next_ip(interface)
+    if not next:
+        raise HTTPException(status_code=404, detail="No available IP found")
+    return {"interface": interface, "next_available_ip": next}
+
+
+@app.get("/interfaces/{interface}/peers")
+def api_list_peers(interface: str, hide_private: bool = True, _=Depends(require_jwt)):
+    peers = list_peers(interface, as_json=True, print_output=False)
+    if peers is None:
+        raise HTTPException(status_code=404, detail="Interface not found")
+    if hide_private:
+        for p in peers:
+            p.pop("private_key", None)
+    return {"interface": interface, "peers": peers}
+
+
+@app.post("/interfaces/{interface}/peers/validate")
+def api_validate_peer(interface: str, body: ValidatePeerReq, _=Depends(require_jwt)):
+    """Validate a prospective peer name/IP without creating it.
+
+    Returns:
+      {"ok": True} on success or HTTP 400 with {"detail": <reason>}.
+      Accepts optional IP; if omitted the next-available IP logic would apply when creating.
+    """
+    if not body.name:
+        raise HTTPException(status_code=400, detail="name required")
+    # If IP not supplied we still validate name uniqueness & reserved word.
+    test_ip = body.ip if body.ip is not None else get_next_ip(interface)
+    old_name = body.old_name if body.old_name is not None else None
+    old_ip = body.old_ip if body.old_ip is not None else None
+
+    ignore_name: bool = False
+    ignore_ip: bool = False
+    if old_name and old_name == body.name:
+        ignore_name = True
+    if old_ip and old_ip == test_ip:
+        ignore_ip = True
+
+    try:
+        ok, meta = check_new_peer(
+            interface, body.name, test_ip, ignore_name=ignore_name, ignore_ip=ignore_ip
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"validation failed: {e}")
+    if not ok:
+        # meta contains {'error': ...}
+        raise HTTPException(status_code=400, detail=meta.get("error", "invalid"))
+    to_return = {"ok": True, "interface": interface, "name": body.name, "ip": test_ip}
+
+    if (
+        body.new_allowed is not None
+        and body.old_allowed is not None
+        and body.new_allowed != body.old_allowed
+    ) or (body.new_allowed is not None):
+        try:
+            ok, meta = validate_allowed_ips(interface, body.new_allowed)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid allowed_ips: {e}")
+
+        if not ok:
+            raise HTTPException(status_code=400, detail=meta.get("error", "invalid"))
+
+    return to_return
+
+
+def _create_peer(interface: str, req: AddPeerReq):
+    if not req.name:
+        raise HTTPException(status_code=400, detail="Peer name required")
+    add_peer(interface, req.name, peer_ip=req.peer_ip, allowed_ips=req.allowed_ips)
+    peer_obj = show_peer_config(interface, req.name, as_json=True, print_output=False)
+    if not peer_obj:
+        raise HTTPException(status_code=500, detail="Failed to add peer")
+    peers_obj = get_peers_info(interface, as_json=False)
+    return peers_obj
+
+
+@app.post("/interfaces/{interface}/peers", status_code=201)
+def api_add_peer_legacy(interface: str, req: AddPeerReq, _=Depends(require_jwt)):
+    """(Deprecated) Create a peer. Prefer POST /interfaces/{interface}/peers/add"""
+    obj = _create_peer(interface, req)
+    obj["deprecated_endpoint"] = True
+    return obj
+
+
+@app.post("/interfaces/{interface}/peers/add", status_code=201)
+def api_add_peer(interface: str, req: AddPeerReq, _=Depends(require_jwt)):
+    return _create_peer(interface, req)
+
+
+@app.get("/interfaces/{interface}/peers/{peer}")
+def api_get_peer(
+    interface: str, peer: str, include_private: bool = True, _=Depends(require_jwt)
+):
+    obj = show_peer_config(interface, peer, as_json=True, print_output=False)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Peer not found")
+    if not include_private:
+        obj["peer_data"].pop("private_key", None)
+    return obj
+
+
+@app.delete("/interfaces/{interface}/peers/{peer}")
+def api_delete_peer(interface: str, peer: str, _=Depends(require_jwt)):
+    # Verify exists first
+    obj = show_peer_config(interface, peer, as_json=True, print_output=False)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Peer not found")
+    ok, meta = remove_peer(interface, peer)
+    if not ok:
+        raise HTTPException(status_code=400, detail=meta.get("error", "invalid"))
+    return {"deleted": True, "peer": peer, "interface": interface}
+
+
+@app.patch("/interfaces/{interface}/peers/{peer}")
+def api_update_peer(
+    interface: str, peer: str, req: UpdatePeerReq, _=Depends(require_jwt)
+):
+    # Ensure peer exists first
+    existing = show_peer_config(interface, peer, as_json=True, print_output=False)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Peer not found")
+    did_any = False
+    current_name = peer
+    current_peer = existing.get("peer_data", {})
+    if req.allowed_ips is not None and req.allowed_ips != current_peer.get(
+        "allowed_ips"
+    ):
+        update_config(interface, current_name, "allowed-ips", req.allowed_ips)
+        did_any = True
+    # ip change
+    if req.ip is not None and req.ip != current_peer.get("ip"):
+        update_config(interface, current_name, "ip", req.ip)
+        did_any = True
+    # rotate keys
+    if req.rotate_keys:
+        update_config(interface, current_name, "rotate-keys", "")
+        did_any = True
+    # rename (do last so earlier updates refer to original name)
+    if req.new_name is not None and req.new_name != current_name:
+        update_config(interface, current_name, "rename", req.new_name)
+        current_name = req.new_name
+        did_any = True
+    if not did_any:
+        raise HTTPException(
+            status_code=400,
+            detail="Nothing changed!",
+        )
+    # Fetch updated peer state using the final name after potential rename
+    obj = show_peer_config(interface, current_name, as_json=True, print_output=False)
+    if obj is None:
+        raise HTTPException(
+            status_code=500, detail="Peer state unavailable after update"
+        )
+    obj["peer_data"].pop("private_key", None)
+    # Provide interface summary and final peer name
+    data = api_get_interface(interface)
+    return {"name": current_name, "interface": data, "peer": obj}
+
+
+@app.post("/interfaces/{interface}/peers/{peer}/rotate")
+def api_rotate_peer(interface: str, peer: str, _=Depends(require_jwt)):
+    rotate_peer_key(interface, peer)
+    obj = show_peer_config(interface, peer, as_json=True, print_output=False)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Peer not found after rotate")
+    obj["peer_data"].pop("private_key", None)
+    return {"rotated": True, "peer": peer, "interface": interface, "peer_state": obj}
+
+
+class RenamePeerReq(BaseModel):
+    new_name: str
+
+
+@app.post("/interfaces/{interface}/peers/{peer}/rename")
+def api_rename_peer(
+    interface: str, peer: str, req: RenamePeerReq, _=Depends(require_jwt)
+):
+    if not req.new_name:
+        raise HTTPException(status_code=400, detail="new_name required")
+    rename_peer(interface, peer, req.new_name)
+    obj = show_peer_config(interface, req.new_name, as_json=True, print_output=False)
+    if obj is None:
+        raise HTTPException(status_code=500, detail="Rename failed")
+    obj["peer_data"].pop("private_key", None)
+    return {"renamed": True, "old": peer, "new": req.new_name, "interface": interface}
+
+
+@app.post("/interfaces/{interface}/peers/bulk", status_code=201)
+def api_bulk_add_peers_legacy(
+    interface: str, req: BulkAddPeersReq, _=Depends(require_jwt)
+):
+    """(Deprecated) bulk add peers. Prefer /peers/bulk-add"""
+    created = []
+    errors = []
+    for entry in req.peers:
+        try:
+            add_peer(interface, entry.name, allowed_ips=entry.allowed_ips)
+            obj = show_peer_config(
+                interface, entry.name, as_json=True, print_output=False
+            )
+            if obj:
+                obj["peer_data"].pop("private_key", None)
+                created.append(obj)
+            else:
+                errors.append({"name": entry.name, "error": "creation_failed"})
+        except Exception as e:  # noqa
+            errors.append({"name": entry.name, "error": str(e)})
+    return {"created": created, "errors": errors, "deprecated_endpoint": True}
+
+
+@app.post("/interfaces/{interface}/peers/bulk-add", status_code=201)
+def api_bulk_add_peers(interface: str, req: BulkAddPeersReq, _=Depends(require_jwt)):
+    created = []
+    errors = []
+    for entry in req.peers:
+        try:
+            add_peer(interface, entry.name, allowed_ips=entry.allowed_ips)
+            obj = show_peer_config(
+                interface, entry.name, as_json=True, print_output=False
+            )
+            if obj:
+                obj["peer_data"].pop("private_key", None)
+                created.append(obj)
+            else:
+                errors.append({"name": entry.name, "error": "creation_failed"})
+        except Exception as e:  # noqa
+            errors.append({"name": entry.name, "error": str(e)})
+    return {"created": created, "errors": errors}
+
+
+@app.get("/interfaces/{interface}/custom/{direction}")
+def api_list_custom(interface: str, direction: str, _=Depends(require_jwt)):
+    if direction not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="direction must be up or down")
+    d = load_data(interface)
+    cmds = d.get("server", {}).get(
+        "custom_post_up" if direction == "up" else "custom_post_down", []
+    )
+    return {"interface": interface, "direction": direction, "commands": cmds}
+
+
+@app.post("/interfaces/{interface}/custom/{direction}", status_code=201)
+def api_add_custom(
+    interface: str, direction: str, req: CustomCommandReq, _=Depends(require_jwt)
+):
+    if direction not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="direction must be up or down")
+    if not req.command:
+        raise HTTPException(status_code=400, detail="command required")
+    add_custom_command(interface, direction, req.command)
+    return {"added": True}
+
+
+@app.delete("/interfaces/{interface}/custom/{direction}/{index}")
+def api_delete_custom(
+    interface: str, direction: str, index: int, _=Depends(require_jwt)
+):
+    if direction not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="direction must be up or down")
+    # delete_custom_command can remove by index (1-based) or command string; we pass index as string
+    delete_custom_command(interface, direction, str(index))
+    return {"deleted": True}
+
+
+@app.post("/interfaces/{interface}/start")
+def api_start_interface(interface: str, _=Depends(require_jwt)):
+    start_wireguard(interface)
+    return {"started": True, "interface": interface}
+
+
+@app.post("/interfaces/{interface}/stop")
+def api_stop_interface(interface: str, _=Depends(require_jwt)):
+    stop_wireguard(interface)
+    return {"stopped": True, "interface": interface}
+
+
+@app.get("/interfaces/{interface}/runtime")
+def api_runtime_status(interface: str, _=Depends(require_jwt)):
+    # Provide raw output of 'wg show <iface>' (safe; may include public keys)
+    import subprocess, shlex
+
+    try:
+        res = subprocess.run(
+            ["wg", "show", interface],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
+        return {"interface": interface, "raw": res.stdout}
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=400, detail=e.stderr.strip() or "wg show failed"
+        )
+
+
+# ---------------- Additional modification/control endpoints -----------------
+
+
+@app.post("/interfaces/{interface}/regenerate")
+def api_regenerate_config(interface: str, _=Depends(require_jwt)):
+    # Force rebuild of server config (will also restart if active)
+    try:
+        generate_config(interface)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"regenerated": True, "interface": interface}
+
+
+@app.post("/interfaces/{interface}/service/enable")
+def api_enable_service(interface: str, _=Depends(require_jwt)):
+    try:
+        enable_service(interface)
+        start_wireguard(interface)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    data = list_interfaces(as_json=True, print_output=False)
+    return {
+        "service_enabled": True,
+        "interface": interface,
+        "data": data,
+        "active": is_interface_active(interface),
+    }
+
+
+@app.post("/interfaces/{interface}/service/disable")
+def api_disable_service(interface: str, _=Depends(require_jwt)):
+    try:
+        stop_wireguard(interface)
+        disable_service(interface)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    data = list_interfaces(as_json=True, print_output=False)
+    return {
+        "service_disabled": True,
+        "interface": interface,
+        "data": data,
+        "active": is_interface_active(interface),
+    }
+
+
+class PeerConfigReq(BaseModel):
+    save: bool = False
+
+
+@app.post("/interfaces/{interface}/peers/{peer}/config")
+def api_peer_config(
+    interface: str, peer: str, body: PeerConfigReq, _=Depends(require_jwt)
+):
+    cfg_obj = show_peer_config(interface, peer, as_json=True, print_output=False)
+    if cfg_obj is None:
+        raise HTTPException(status_code=404, detail="Peer not found")
+    # Produce client config text (this path includes private key inside peer_data)
+    text_cfg = generate_peer_config(interface, peer)
+    if text_cfg is None:
+        raise HTTPException(status_code=500, detail="Failed generating config")
+    if body.save:
+        # will write file under ./client_configs relative to API working dir
+        try:
+            from pyguard import save_client_config
+
+            save_client_config(peer, text_cfg)
+        except Exception:
+            pass
+    # Hide server private key & peer private key in response but include peer private if explicitly asked? Always hide for safety.
+    cfg_obj["peer_data"].pop("private_key", None)
+    return {"meta": cfg_obj, "client_config": text_cfg}
+
+
+@app.get("/interfaces/{interface}/peers/{peer}/qr")
+def api_peer_qr(interface: str, peer: str, _=Depends(require_jwt)):
+    """Return base64 PNG QR for the peer's client config."""
+    import subprocess, base64, tempfile
+
+    text_cfg = generate_peer_config(interface, peer)
+    if text_cfg is None:
+        raise HTTPException(status_code=404, detail="Peer not found")
+    # Use qrencode to stdout (-o -)
+    try:
+        proc = subprocess.run(
+            ["qrencode", "-t", "PNG", "-o", "-"],
+            input=text_cfg.encode(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="qrencode not installed on server")
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=500, detail=f"qrencode failed: {e.stderr.decode().strip()}"
+        )
+    b64 = base64.b64encode(proc.stdout).decode()
+    return {"peer": peer, "interface": interface, "qr_png_base64": b64}

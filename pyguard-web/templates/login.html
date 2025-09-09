@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PyGuard Login</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body class="login-body">
+    <div class="login-wrapper">
+      <form class="login-form" method="post" action="/login">
+        <div class="brand-title">
+          <img
+            src="/static/img/logo-transparent.png"
+            alt="PyGuard"
+            class="logo-inline"
+          />
+          <h1>PyGuard</h1>
+        </div>
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+        <div class="field">
+          <input
+            class="pw-field"
+            type="password"
+            name="password"
+            placeholder="Password"
+            autofocus
+            required
+          />
+        </div>
+        <button class="login-btn" type="submit">Login</button>
+      </form>
+    </div>
+  </body>
+</html>
