@@ -512,6 +512,29 @@
         font-size: 20px;
         letter-spacing: 0.5px;
       }
+      /* Shimmer loading for inputs */
+      @keyframes shimmer {
+        0% {
+          background-position: 200% 0;
+        }
+        100% {
+          background-position: -200% 0;
+        }
+      }
+      .input-loading {
+        color: transparent !important;
+        background-image: linear-gradient(
+          90deg,
+          #132028 25%,
+          #1b2b36 50%,
+          #132028 75%
+        ) !important;
+        background-size: 200% 100% !important;
+        animation: shimmer 1.2s linear infinite;
+      }
+      .input-loading::placeholder {
+        color: transparent !important;
+      }
       .pm-field {
         display: flex;
         flex-direction: column;
@@ -874,6 +897,7 @@
     <div id="editPeerModal" style="display: none"></div>
     <div id="deletePeerModal" style="display: none"></div>
     <div id="deleteInterfaceModal" style="display: none"></div>
+  <div id="logoutModal" style="display: none"></div>
     <script>
       const apiBase = document.querySelector('meta[name="api-base"]').content;
       const token = document.querySelector('meta[name="access-token"]').content;
@@ -1078,6 +1102,16 @@
       async function selectInterface(iface) {
         clearPeerDetailInterval();
         clearInterfaceRefreshInterval();
+        // Reset any previously selected peer to avoid stale highlight when switching back
+        currentPeerPublicKey = null;
+        currentPeerName = null;
+        lastPeerDetail = null;
+        // Hide detail status pill until a peer is opened again
+        if (peerDetailStatusPill) peerDetailStatusPill.style.display = "none";
+        // Proactively remove any lingering active class from existing rows
+        document
+          .querySelectorAll(".peer-row.active")
+          .forEach((r) => r.classList.remove("active"));
         currentInterface = iface;
         document
           .querySelectorAll(".iface-item")
@@ -1202,6 +1236,28 @@
           peersContainer.appendChild(el);
         });
       }
+      function setPeerDetailLoading(loading) {
+        const fields = [
+          detailPublicKey,
+          detailIP,
+          detailDownload,
+          detailUpload,
+          detailHandshake,
+          detailConfig,
+        ];
+        fields.forEach((el) => {
+          if (!el) return;
+          if (loading) {
+            el.setAttribute("disabled", "true");
+            el.setAttribute("aria-busy", "true");
+            el.classList.add("input-loading");
+          } else {
+            el.removeAttribute("disabled");
+            el.removeAttribute("aria-busy");
+            el.classList.remove("input-loading");
+          }
+        });
+      }
       async function openPeer(pub) {
         const p = peers.find((x) => x.public_key === pub);
         if (!p) return;
@@ -1223,6 +1279,8 @@
           islandEl.querySelector(".details-region")?.classList.add("peer-open");
           islandEl.classList.add("peer-open");
         }
+        // Start shimmer loading on peer detail fields
+        setPeerDetailLoading(true);
         // Fetch detailed peer info
         try {
           const detail = await fetchJSON(
@@ -1330,6 +1388,9 @@
           }
         } catch (e) {
           /* toast already shown */
+        } finally {
+          // End shimmer loading regardless of outcome
+          setPeerDetailLoading(false);
         }
         originalPeerData = serializeForm();
         if (dirtyFlag) dirtyFlag.style.display = "none";
@@ -1507,8 +1568,8 @@
             const res = await fetch(
               `${apiBase}/interfaces/${encodeURIComponent(
                 currentInterface
-              )}/peers/${encodeURIComponent(currentPeerName)}`,
-              { method: "DELETE", headers: headers() }
+              )}/peers/${encodeURIComponent(currentPeerName)}/delete`,
+              { method: "POST", headers: headers() }
             );
             if (!res.ok) {
               const d = await res.json().catch(() => ({}));
@@ -1567,8 +1628,8 @@
           try {
             const name = currentInterface;
             const res = await fetch(
-              `${apiBase}/interfaces/${encodeURIComponent(name)}`,
-              { method: "DELETE", headers: headers() }
+              `${apiBase}/interfaces/${encodeURIComponent(name)}/delete`,
+              { method: "POST", headers: headers() }
             );
             if (!res.ok) {
               const d = await res.json().catch(() => ({}));
@@ -2000,26 +2061,22 @@
           if (originalPeerData) openPeer(currentPeerPublicKey);
         };
       // Add Interface modal
-      function buildAddInterfaceModal(prefill) {
+      function buildAddInterfaceModal(prefill, loading = false) {
         const name = prefill?.name || "";
         const port = prefill?.port ?? "";
         const network = prefill?.network || "";
         const public_ip = prefill?.public_ip || "";
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="aimClose" aria-label="Close">×</button>\n    <h3>Add Interface</h3>\n    <form id="aimForm" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="aimName">Name</label>\n        <input id="aimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPort">Port</label>\n        <input id="aimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimNetwork">Network</label>\n        <input id="aimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPublicIP">Public IP</label>\n        <input id="aimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="aimIgnore" checked />\n        <label for="aimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="aimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="aimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="aimCreate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+        const dis = loading ? 'disabled aria-busy="true"' : "";
+        const cls = loading ? " input-loading" : "";
+        const chkDis = loading ? "disabled" : "";
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="aimClose" aria-label="Close">×</button>\n    <h3>Add Interface</h3>\n    <form id="aimForm" data-loading="${
+          loading ? 1 : 0
+        }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="aimName">Name</label>\n        <input ${dis} class="${cls.trim()}" id="aimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPort">Port</label>\n        <input ${dis} class="${cls.trim()}" id="aimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimNetwork">Network</label>\n        <input ${dis} class="${cls.trim()}" id="aimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPublicIP">Public IP</label>\n        <input ${dis} class="${cls.trim()}" id="aimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="aimIgnore" ${chkDis} checked />\n        <label for="aimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="aimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="aimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="aimCreate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`;
       }
       async function openAddInterfaceModal() {
         if (!addInterfaceModalMount) return;
-        let defaults = null;
-        try {
-          defaults = await fetchJSON(`${apiBase}/interfaces/defaults`, {
-            headers: headers(),
-          });
-        } catch (_) {
-          defaults = {};
-        }
-        addInterfaceModalMount.innerHTML = buildAddInterfaceModal(
-          defaults || {}
-        );
+        // Render instantly in loading state
+        addInterfaceModalMount.innerHTML = buildAddInterfaceModal({}, true);
         addInterfaceModalMount.style.display = "block";
         const overlay = addInterfaceModalMount.querySelector(
           ".peer-modal-overlay"
@@ -2038,9 +2095,49 @@
         overlay.addEventListener("click", (e) => {
           if (e.target === overlay) close();
         });
-        nameInput?.focus();
+        let isLoading = true;
+        // Kick off async fetch of defaults; populate and unlock when ready
+        (async () => {
+          let defaults = {};
+          try {
+            defaults =
+              (await fetchJSON(`${apiBase}/interfaces/defaults`, {
+                headers: headers(),
+              })) || {};
+          } catch (_) {
+            defaults = {};
+          }
+          // Update values
+          const _name = addInterfaceModalMount.querySelector("#aimName");
+          const _port = addInterfaceModalMount.querySelector("#aimPort");
+          const _net = addInterfaceModalMount.querySelector("#aimNetwork");
+          const _pip = addInterfaceModalMount.querySelector("#aimPublicIP");
+          if (_name && !_name.value) _name.value = defaults.name || "";
+          if (_port && !_port.value) _port.value = defaults.port ?? "";
+          if (_net && !_net.value) _net.value = defaults.network || "";
+          if (_pip && !_pip.value) _pip.value = defaults.public_ip || "";
+          // Unlock inputs
+          [_name, _port, _net, _pip].forEach((el) => {
+            if (el) {
+              el.removeAttribute("disabled");
+              el.classList.remove("input-loading");
+              el.removeAttribute("aria-busy");
+            }
+          });
+          const chk = addInterfaceModalMount.querySelector("#aimIgnore");
+          if (chk) chk.removeAttribute("disabled");
+          isLoading = false;
+          form?.setAttribute("data-loading", "0");
+          // Now focus the name field
+          _name?.focus();
+        })();
         form.addEventListener("submit", async (e) => {
           e.preventDefault();
+          if (form?.getAttribute("data-loading") === "1") {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Please wait for defaults...";
+            return;
+          }
           const name = (
             addInterfaceModalMount.querySelector("#aimName")?.value || ""
           ).trim();
@@ -2209,23 +2306,23 @@
           showQrModal(name);
         });
       // Edit Peer modal
-      function buildEditPeerModal(prefill) {
+      function buildEditPeerModal(prefill, loading = false) {
         const n = prefill?.name || "";
         const ip = prefill?.ip || "";
         const allowed = prefill?.allowed_ips || "";
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="epmClose" aria-label="Close">×</button>\n    <h3>Edit Peer</h3>\n    <form id="epmForm" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="epmName">Peer Name</label>\n        <input id="epmName" name="name" value="${n}" placeholder="peer name" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmIP">Peer IP</label>\n        <input id="epmIP" name="ip" value="${ip}" placeholder="e.g. 10.0.0.2/32"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmAllowed">Allowed IPs</label>\n        <input id="epmAllowed" name="allowed_ips" value="${allowed}" placeholder="e.g. 0.0.0.0/0, ::/0"/>\n      </div>\n      <div id="epmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="epmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="epmApply" class="btn-glow">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+        const dis = loading ? 'disabled aria-busy="true"' : "";
+        const cls = loading ? " input-loading" : "";
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="epmClose" aria-label="Close">×</button>\n    <h3>Edit Peer</h3>\n    <form id="epmForm" data-loading="${
+          loading ? 1 : 0
+        }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="epmName">Peer Name</label>\n        <input ${dis} class="${cls.trim()}" id="epmName" name="name" value="${n}" placeholder="peer name" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmIP">Peer IP</label>\n        <input ${dis} class="${cls.trim()}" id="epmIP" name="ip" value="${ip}" placeholder="e.g. 10.0.0.2/32"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmAllowed">Allowed IPs</label>\n        <input ${dis} class="${cls.trim()}" id="epmAllowed" name="allowed_ips" value="${allowed}" placeholder="e.g. 0.0.0.0/0, ::/0"/>\n      </div>\n      <div id="epmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="epmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="epmApply" class="btn-glow">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`;
       }
       async function openEditPeerModal() {
         if (!currentInterface || !currentPeerName) {
           showToast("Select a peer first", false);
           return;
         }
-        const prefill = {
-          name: currentPeerName,
-          ip: lastPeerDetail?.peer_data?.ip || "",
-          allowed_ips: lastPeerDetail?.peer_data?.allowed_ips || "",
-        };
-        editPeerModalMount.innerHTML = buildEditPeerModal(prefill);
+        // Open instantly in loading state
+        editPeerModalMount.innerHTML = buildEditPeerModal({}, true);
         editPeerModalMount.style.display = "block";
         const overlay = editPeerModalMount.querySelector(".peer-modal-overlay");
         const form = editPeerModalMount.querySelector("#epmForm");
@@ -2235,7 +2332,6 @@
         const nameInput = editPeerModalMount.querySelector("#epmName");
         const ipInput = editPeerModalMount.querySelector("#epmIP");
         const allowedInput = editPeerModalMount.querySelector("#epmAllowed");
-        nameInput.focus();
         function close() {
           editPeerModalMount.style.display = "none";
           editPeerModalMount.innerHTML = "";
@@ -2245,6 +2341,37 @@
         overlay.addEventListener("click", (e) => {
           if (e.target === overlay) close();
         });
+        // Populate and unlock asynchronously (use existing detail if available, otherwise fetch)
+        (async () => {
+          let ip = lastPeerDetail?.peer_data?.ip || "";
+          let allowed = lastPeerDetail?.peer_data?.allowed_ips || "";
+          if (!ip || !allowed) {
+            try {
+              const d = await fetchJSON(
+                `${apiBase}/interfaces/${encodeURIComponent(
+                  currentInterface
+                )}/peers/${encodeURIComponent(currentPeerName)}`,
+                { headers: headers() }
+              );
+              ip = d?.peer_data?.ip || ip || "";
+              allowed = d?.peer_data?.allowed_ips || allowed || "";
+            } catch (_) {}
+          }
+          // Fill fields
+          if (nameInput) nameInput.value = currentPeerName;
+          if (ipInput) ipInput.value = ip;
+          if (allowedInput) allowedInput.value = allowed;
+          // Unlock
+          [nameInput, ipInput, allowedInput].forEach((el) => {
+            if (el) {
+              el.removeAttribute("disabled");
+              el.classList.remove("input-loading");
+              el.removeAttribute("aria-busy");
+            }
+          });
+          form?.setAttribute("data-loading", "0");
+          nameInput?.focus();
+        })();
         form.addEventListener("submit", async (e) => {
           e.preventDefault();
           feedback.style.color = "#a0b4c0";
@@ -2253,6 +2380,11 @@
           const ipVal =
             ipInput.value.trim() || lastPeerDetail?.peer_data?.ip || "";
           const newAllowed = allowedInput.value.trim();
+          if (form?.getAttribute("data-loading") === "1") {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Please wait for current values...";
+            return;
+          }
           if (!name) {
             feedback.style.color = "#ff6b6b";
             feedback.textContent = "Name required";
@@ -2297,9 +2429,9 @@
               const upd = await fetchJSON(
                 `${apiBase}/interfaces/${encodeURIComponent(
                   currentInterface
-                )}/peers/${encodeURIComponent(currentPeerName)}`,
+                )}/peers/${encodeURIComponent(currentPeerName)}/update`,
                 {
-                  method: "PATCH",
+                  method: "POST",
                   headers: headers(),
                   body: JSON.stringify(patchBody),
                 }
@@ -2365,14 +2497,32 @@
           } catch (_) {}
         }, 5000);
       })();
-      // Logout confirmation
+      // Logout confirmation (styled modal)
       const logoutLink = document.querySelector(".logout");
+      const logoutModalMount = document.getElementById("logoutModal");
+      function buildLogoutModal() {
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="lomClose" aria-label="Close">×</button>\n    <h3>Logout</h3>\n    <div style="font-size:14px;color:#cfd8dc;">Are you sure you want to log out?</div>\n    <div class="pm-actions">\n      <button type="button" id="lomCancel" class="btn-press">Cancel</button>\n      <button type="button" id="lomLogout" class="btn-danger btn-press">Logout</button>\n    </div>\n  </div>\n</div>`;
+      }
+      function openLogoutModal(anchor) {
+        logoutModalMount.innerHTML = buildLogoutModal();
+        logoutModalMount.style.display = "block";
+        const overlay = logoutModalMount.querySelector(".peer-modal-overlay");
+        const btnClose = logoutModalMount.querySelector("#lomClose");
+        const btnCancel = logoutModalMount.querySelector("#lomCancel");
+        const btnLogout = logoutModalMount.querySelector("#lomLogout");
+        function close() {
+          logoutModalMount.style.display = "none";
+          logoutModalMount.innerHTML = "";
+        }
+        btnClose.onclick = close;
+        btnCancel.onclick = close;
+        overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+        btnLogout.onclick = () => { window.location.href = anchor?.href || "/logout"; };
+      }
       if (logoutLink) {
         logoutLink.addEventListener("click", (e) => {
-          const ok = window.confirm("Are you sure you want to log out?");
-          if (!ok) {
-            e.preventDefault();
-          }
+          e.preventDefault();
+          openLogoutModal(logoutLink);
         });
       }
     </script>

@@ -13,9 +13,9 @@ body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,san
 .login-form { display:flex; flex-direction:column; min-width:260px; }
 .login-form h1 { margin:0 0 25px; font-size:32px; font-weight:600; letter-spacing:.5px; }
 .field { margin-bottom:18px; }
-.field input { width:100%; padding:14px 16px; border-radius:10px; border:1px solid #394255; background:#181c24; color:#f1f3f6; font-size:15px; outline:none; transition:border .2s, background .2s; }
+.field input { width:100%; padding:14px 16px; border-radius:10px; border:1px solid #394255; background:#181c24; color:#f1f3f6; font-size:15px; outline:none; transition:border .2s, background .2s; box-sizing:border-box; }
 /* Specific narrower password + matching button */
-.login-form .pw-field { width:200px; }
+.login-form .pw-field { width:100%; }
 .login-form .login-btn { width:200px; align-self:flex-start; }
 .field input:focus { border-color:#637bff; background:#1e2430; }
 button { cursor:pointer; padding:14px 20px; border-radius:10px; border:1px solid #5867f5; background:linear-gradient(135deg,#637bff,#8b5cf6); color:#fff; font-size:15px; font-weight:600; letter-spacing:.5px; box-shadow:0 4px 14px -4px #637bffaa; transition: background .25s, transform .15s; }
@@ -37,7 +37,7 @@ button:active { transform:translateY(0); }
 .iface-name { font-size:18px; font-weight:600; letter-spacing:.5px; }
 .iface-meta { font-size:13px; color:#a0acbd; }
 
-@media (max-width:680px){ .login-wrapper { flex-direction:column; padding:38px 34px; } .logo { width:200px; } .login-form .pw-field, .login-form .login-btn { width:220px; } }
+@media (max-width:680px){ .login-wrapper { flex-direction:column; padding:38px 34px; } .logo { width:200px; } .login-form .pw-field, .login-form .login-btn { width:100%; } }
 
 /* Dashboard top bar (hyphenated class used in dashboard.html) */
 .top-bar { display:flex; align-items:center; justify-content:space-between; background:#10161d; padding:10px 18px; border-bottom:1px solid #1f2c38; position:sticky; top:0; z-index:50; }

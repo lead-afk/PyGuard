@@ -57,7 +57,7 @@ def migrate_if_legacy(interface: str):
             print(f"Warning: failed migrating legacy data file {legacy} -> {new}: {e}")
 
 
-def list_interfaces(as_json: bool = False, print_output: bool = True):
+def list_interfaces(as_json: bool = False, print_output: bool = False):  # ???
     """List interfaces with optional JSON output.
     Returns list of names (if not as_json) or list of detail dicts (if as_json).
     """
@@ -79,9 +79,9 @@ def list_interfaces(as_json: bool = False, print_output: bool = True):
             details.append(
                 {
                     "name": iface,
-                    "port": srv.get("port"),
-                    "network": srv.get("network"),
-                    "public_ip": srv.get("public_ip"),
+                    "port": srv.get("port", 0),
+                    "network": srv.get("network", "0.0.0.0/0"),
+                    "public_ip": srv.get("public_ip", "0.0.0.0"),
                     "peer_count": len(data.get("peers", {})),
                     "active": active,
                 }
@@ -90,23 +90,23 @@ def list_interfaces(as_json: bool = False, print_output: bool = True):
             details.append({"name": iface, "error": "load_failed"})
     names.sort()
     details.sort(key=lambda d: d.get("name"))
-    if as_json:
-        if print_output:
-            print(json.dumps({"interfaces": details}, indent=2))
-        return details
+
     if print_output:
-        if not names:
-            print("No interfaces initialized")
+        if not as_json:
+            if not names:
+                print("No interfaces initialized")
+            else:
+                print("Interfaces:")
+                for d in details:
+                    if "error" in d:
+                        print(f"  {d['name']} (error loading data)")
+                    else:
+                        print(
+                            f"  {d['name']} (port {d['port']}, network {d['network']}), peers: {d['peer_count']}, active: {d['active']})"
+                        )
         else:
-            print("Interfaces:")
-            for d in details:
-                if "error" in d:
-                    print(f"  {d['name']} (error loading data)")
-                else:
-                    print(
-                        f"  {d['name']} (port {d['port']}, network {d['network']}), peers: {d['peer_count']}, active: {d['active']})"
-                    )
-    return names
+            print(json.dumps({"interfaces": details}, indent=2))
+    return details
 
 
 def command_exists(cmd: str) -> bool:
@@ -286,7 +286,7 @@ def _parse_handshake_to_seconds(handshake_str: str) -> int | None:
     return total_seconds if total_seconds > 0 else None
 
 
-def get_peers_info(interface: str, as_json: bool = False, specific_peer: str = None):
+def get_peers_info(interface: str, specific_peer: str = None):
     """
     Parse `wg show <interface>` and return peers info.
 
@@ -301,9 +301,17 @@ def get_peers_info(interface: str, as_json: bool = False, specific_peer: str = N
     ensure_root()  # make sure we are root before calling wg
 
     result = subprocess.run(
-        ["wg", "show", interface], capture_output=True, text=True, check=True
+        ["wg", "show", interface], capture_output=True, text=True, check=False
     )
     lines = result.stdout.splitlines()
+
+    DEFAULT_PEER_DATA = {
+        "last_handshake": 600,
+        "last_handshake_str": "never",
+        "active": False,
+        "download": "0.0 KiB",
+        "uploaded": "0.0 KiB",
+    }
 
     peers = {}
     current_peer = None
@@ -312,13 +320,7 @@ def get_peers_info(interface: str, as_json: bool = False, specific_peer: str = N
         line = line.strip()
         if line.startswith("peer:"):
             current_peer = line.split()[1]
-            peers[current_peer] = {
-                "last_handshake": 600,
-                "last_handshake_str": "never",
-                "active": False,
-                "download": "0.0 KiB",
-                "uploaded": "0.0 KiB",
-            }
+            peers[current_peer] = DEFAULT_PEER_DATA.copy()
         elif line.startswith("latest handshake:") and current_peer:
             hs_str = line.split(":", 1)[1].strip()
             hs_seconds = _parse_handshake_to_seconds(hs_str)
@@ -352,12 +354,14 @@ def get_peers_info(interface: str, as_json: bool = False, specific_peer: str = N
                 toReturn[peer] = peers[pub_key]
                 break
 
+        if peer not in toReturn:
+            toReturn[peer] = DEFAULT_PEER_DATA.copy()
+
     if specific_peer and specific_peer not in toReturn:
         toReturn[specific_peer] = {}
     elif specific_peer:
         toReturn = toReturn.get(specific_peer, {})
-    if as_json:
-        return json.dumps({"peers": toReturn}, indent=2)
+
     return toReturn
 
 
@@ -489,12 +493,17 @@ def get_used_ip_ranges():
 
 def get_public_ip():
 
-    result = subprocess.run(
-        ["curl", "ifconfig.me"], capture_output=True, text=True, check=True
-    )
+    result = None
+    try:
+        result = subprocess.run(
+            ["curl", "ifconfig.me"], capture_output=True, text=True, check=True
+        )
+    except subprocess.CalledProcessError:
+        pass
 
-    # Decode and return the stdout as a string
-    return result.stdout.strip()
+    toReturn = result.stdout.strip() if result else "<unknown>"
+
+    return toReturn
 
 
 def validate_new_interface(
@@ -780,34 +789,35 @@ def rename_peer(interface: str, old: str, new: str):
     generate_config(interface, data)
 
 
-def list_peers(interface: str, as_json: bool = False, print_output: bool = True):
+def list_peers(interface: str, print_output: bool = False, as_json: bool = False):
     """List peers for an interface; returns names or detail list if JSON."""
     data = load_data(interface)
     peers = data.get("peers", {})
     names = sorted(peers.keys())
-    if as_json:
-        result = []
-        for name in names:
-            p = peers[name].copy()
-            p["name"] = name
-            result.append(p)
-        if print_output:
-            print(json.dumps({"peers": result}, indent=2))
-        return result
+    result = []
+
+    for name in names:
+        p = peers.get(name, {}).copy()
+        p["name"] = name
+        result.append(p)
+
     if print_output:
-        if not names:
-            print("No peers configured")
-        else:
-            print(
-                f"{'#':<4} {'Name':<20} {'IP':<15} {'Allowed IPs':<20} {'Public Key':<45} {'Created At':<20}"
-            )
-            print("-" * 128)
-            for i, name in enumerate(names, start=1):
-                peer = peers[name]
+        if not as_json:
+            if not names:
+                print("No peers configured")
+            else:
                 print(
-                    f"{i:<4} {name:<20} {peer['ip']:<15} {peer['allowed_ips']:<20} {peer['public_key']:<45} {peer.get('created_at','N/A'):<20}"
+                    f"{'#':<4} {'Name':<20} {'IP':<15} {'Allowed IPs':<20} {'Public Key':<45} {'Created At':<20}"
                 )
-    return names
+                print("-" * 128)
+                for i, name in enumerate(names, start=1):
+                    peer = peers[name]
+                    print(
+                        f"{i:<4} {name:<20} {peer['ip']:<15} {peer['allowed_ips']:<20} {peer['public_key']:<45} {peer.get('created_at','N/A'):<20}"
+                    )
+        else:
+            print(json.dumps({"peers": result}, indent=2))
+    return result
 
 
 def build_server_config_string(data: dict) -> str:
@@ -1059,51 +1069,51 @@ def show_peer_config(
     qr_code=False,
     save_qr=False,
     as_json: bool = False,
-    print_output: bool = True,
+    print_output: bool = False,
 ):
     config = generate_peer_config(interface, name)
 
-    if as_json:
-        data = load_data(interface)
-        peer = data.get("peers", {}).get(name)
-        if peer is None:
-            if print_output:
-                print(json.dumps({"error": "peer_not_found", "peer": name}, indent=2))
-            return None
-
-        additional_peer_info = get_peers_info(
-            interface, as_json=False, specific_peer=name
-        )
-        if additional_peer_info:
-            peer.update(additional_peer_info)
-        server = data.get("server", {})
-        result = {
-            "interface": interface,
-            "peer": name,
-            "peer_data": peer,
-            "config_text": config,
-            "server_public_key": server.get("public_key"),
-            "server_endpoint_host": server.get("public_ip") or None,
-            "server_port": server.get("port"),
-            "server_network": server.get("network"),
-            "server_dns": server.get("dns"),
-            "needs_public_ip": not bool(server.get("public_ip")),
-        }
+    data = load_data(interface)
+    peer = data.get("peers", {}).get(name)
+    if peer is None:
         if print_output:
-            print(json.dumps(result, indent=2))
-        return result
+            print(json.dumps({"error": "peer_not_found", "peer": name}, indent=2))
+        return None
+
+    additional_peer_info = get_peers_info(interface, specific_peer=name)
+    if additional_peer_info:
+        peer.update(additional_peer_info)
+
     if not config:
         return None
-    placeholder = "<SERVER_PUBLIC_IP>" in config
+
+    server = data.get("server", {})
+    result = {
+        "interface": interface,
+        "peer": name,
+        "peer_data": peer,
+        "config_text": config,
+        "server_public_key": server.get("public_key"),
+        "server_endpoint_host": server.get("public_ip") or None,
+        "server_port": server.get("port"),
+        "server_network": server.get("network"),
+        "server_dns": server.get("dns"),
+        "needs_public_ip": not bool(server.get("public_ip")),
+    }
+
     if print_output:
-        print(f"\nConfiguration for peer '{name}' (interface {interface}):")
-        print("-" * 60)
-        print(config)
-        print("-" * 60)
-        if placeholder:
-            print(
-                "NOTE: Set a public endpoint: pyguard {interface} update public-ip <host>"
-            )
+        if not as_json:
+            placeholder = "<SERVER_PUBLIC_IP>" in config
+            print(f"\nConfiguration for peer '{name}' (interface {interface}):")
+            print("-" * 60)
+            print(config)
+            print("-" * 60)
+            if placeholder:
+                print(
+                    "NOTE: Set a public endpoint: pyguard {interface} update public-ip <host>"
+                )
+        else:
+            print(json.dumps(result, indent=2))
     if save_config:
         save_client_config(name, config)
     if qr_code or save_qr:
@@ -1111,7 +1121,8 @@ def show_peer_config(
             generate_qr_code(config, name)
         else:
             generate_qr_code(config)
-    return config
+
+    return result
 
 
 def start_wireguard(interface: str):
@@ -1369,7 +1380,7 @@ def main():
         return
 
     if sys.argv[1] == "debug":
-        print(get_peers_info("semiqa", as_json=True))
+        print(get_peers_info("semiqa"))
         exit(0)
     # Top-level commands without interface
     if sys.argv[1] in ("help", "--help", "-h"):
