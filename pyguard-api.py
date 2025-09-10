@@ -58,14 +58,7 @@ log = logging.getLogger("pyguard-api")
 app = FastAPI(title="pyguard API (starter)")
 
 # CORS: allow web dashboard (localhost:6656) to call API with Authorization header
-_default_allowed_origins = [
-    "http://127.0.0.1:6656",
-    "http://10.0.0.1:6656",
-    "http://10.0.0.4:6656",
-    "http://10.0.0.5:6656",
-    "http://localhost:6656",
-    "http://0.0.0.0:6656",
-]
+_default_allowed_origins = ["*"]
 
 # Allow overriding CORS origins via env (comma separated). Set PYGUARD_CORS_ORIGINS="*" to allow all (dev only).
 _env_origins = os.getenv("PYGUARD_CORS_ORIGINS")
@@ -77,11 +70,14 @@ if _env_origins:
 else:
     _allow_origins = _default_allowed_origins
 
-# For convenience also allow any 127.0.0.1 / localhost port in dev unless user provided explicit list.
+# For convenience also allow common local dev hosts/ports unless user provided explicit list.
 _allow_origin_regex = None
 if _allow_origins == _default_allowed_origins:
-    # Accept any port on 127.0.0.1 / localhost during development.
-    _allow_origin_regex = r"http://(127\.0\.0\.1|localhost):\d+"
+    # Accept any port on 127.0.0.1 / localhost and 6656 on 0.0.0.0 and 10.0.0.x during development.
+    # Note: Use PYGUARD_CORS_ORIGINS env var to override precisely in production.
+    _allow_origin_regex = (
+        r"http://((127\.0\.0\.1|localhost):\d+|(0\.0\.0\.0|10\.0\.0\.[0-9]{1,3}):6656)"
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -123,6 +119,19 @@ async def _log_origin(request: Request, call_next):
 @app.get("/cors-test")
 def cors_test():
     return {"ok": True, "message": "CORS reachable"}
+
+
+@app.get("/")
+def root_status(request: Request):
+    return {
+        "service": "pyguard-api",
+        "cors": {
+            "allow_origins": _allow_origins,
+            "allow_origin_regex": _allow_origin_regex,
+            "request_origin": request.headers.get("origin"),
+        },
+        "status": "ok",
+    }
 
 
 class LoginReq(BaseModel):
@@ -398,7 +407,7 @@ def api_list_interfaces(_=Depends(require_jwt)):
     return data
 
 
-@app.post("/interfaces", status_code=201)
+@app.post("/interfaces/add", status_code=201)
 def api_init_interface(req: InitInterfaceReq, _=Depends(require_jwt)):
     # Basic validation
     if not req.interface or any(c.isspace() for c in req.interface):
@@ -408,8 +417,14 @@ def api_init_interface(req: InitInterfaceReq, _=Depends(require_jwt)):
         req.interface, port=req.port, network=req.network, public_ip=req.public_ip
     )
     d = load_data(req.interface)
+    if not d.get("server").get("private_key"):
+        raise HTTPException(status_code=500, detail="Failed to initialize server")
     data = list_interfaces(as_json=True, print_output=False)
-    peers_obj = get_peers_info(req.interface, as_json=False, specific_peer=None)
+    try:
+        peers_obj = get_peers_info(req.interface, as_json=False, specific_peer=None)
+    except Exception as e:
+        logging.exception("Failed gathering peer info for %s: %s", req.interface, e)
+        peers_obj = None
     resp = {
         "interface": req.interface,
         "server": _filter_server(d.get("server", {})),
@@ -417,8 +432,8 @@ def api_init_interface(req: InitInterfaceReq, _=Depends(require_jwt)):
         "peer_count": len(peers_obj) if peers_obj else len(d.get("peers", {})),
         "active": is_interface_active(req.interface),
     }
-
-    return {"interface": req.interface, "server": _filter_server(d.get("server", {}))}
+    print("Successful initialization of interface:", req.interface)
+    return {"interface": req.interface, "interfaces": data, "new_data": resp}
 
 
 @app.get("/interfaces/{interface}")
@@ -463,7 +478,8 @@ def api_delete_interface(interface: str, _=Depends(require_jwt)):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Interface not found")
     delete_interface(interface)
-    return {"deleted": True, "interface": interface}
+    data = list_interfaces(as_json=True, print_output=False)
+    return {"deleted": True, "interface": interface, "interfaces": data}
 
 
 @app.post("/interfaces/validate")

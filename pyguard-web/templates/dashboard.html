@@ -37,6 +37,9 @@
         max-width: 1750px;
         margin: 22px auto 40px;
         padding: 0 18px;
+        display: flex;
+        justify-content: center;
+        min-height: 300px;
       }
       .island {
         position: relative;
@@ -44,18 +47,21 @@
         border: 1px solid #1e2a36;
         border-radius: 26px;
         padding: 34px 46px 46px;
-        min-height: 560px;
+        min-height: 200px;
+        max-width: 600px;
+        width: 100%;
         display: flex;
         flex-direction: column;
         gap: 28px;
         box-shadow: 0 10px 40px -12px rgba(0, 0, 0, 0.65),
           0 0 0 1px #182430 inset;
-        transition: all 0.5s cubic-bezier(0.4, 0.18, 0.21, 1);
+        transition: all 0.4s ease-out;
         overflow: hidden;
+        max-height: 720px;
       }
       #island {
         /* opacity: 0.97; */
-        background-color: #182430f8;
+        background-color: #182430e3;
         /* backdrop-filter: blur(6px); */
       }
       .island.expanded {
@@ -63,11 +69,23 @@
         flex-direction: row;
         align-items: flex-start;
         gap: 34px;
+        /* Compact by default (no peer selected) */
+        max-width: 1160px;
+        min-height: 420px;
+        width: 100%;
+      }
+      /* When a peer is actually open, allow full expansion */
+      .island.expanded.peer-open {
+        max-width: 1750px;
+        min-height: 560px;
       }
       .interfaces-panel {
         width: 100%;
-        transition: all 0.5s cubic-bezier(0.4, 0.18, 0.21, 1);
+        transition: all 0.4s ease-out;
         position: relative;
+        max-height: 660px;
+        display: flex;
+        flex-direction: column;
       }
       .island.expanded .interfaces-panel {
         width: 270px;
@@ -86,10 +104,16 @@
         letter-spacing: 1px;
         color: #6fa8dc;
       }
+      /* Add spacing under the Add Interface button */
+      #btnOpenAddInterface {
+        margin-bottom: 14px;
+      }
       .iface-list {
         flex: 1;
         overflow-y: auto;
         padding-right: 4px;
+        max-height: 800px;
+        min-height: 120px;
       }
       .iface-item {
         cursor: pointer;
@@ -128,9 +152,13 @@
         margin-left: 0;
       }
       .details-region.peer-open .peer-detail-panel {
+        /* reveal smoothly */
         opacity: 1;
         transform: translateX(0);
         pointer-events: auto;
+        flex-basis: 500px;
+        max-width: 500px;
+        width: 500px;
       }
       .iface-meta-card {
         background: #101d27;
@@ -144,6 +172,7 @@
         position: relative;
         overflow: hidden;
         min-height: 100px;
+        transition: all 0.4s ease-out;
       }
       /* remove gray overlay for consistency with other sections */
       .iface-meta-card:before {
@@ -161,6 +190,8 @@
         flex-wrap: wrap;
         font-size: 13px;
         color: #a7bac6;
+        margin-top: 20px;
+        width: 780px;
       }
       .iface-stat {
         background: #182733;
@@ -196,6 +227,7 @@
         flex-direction: column;
         gap: 16px;
         position: relative;
+        transition: all 0.4s ease-out;
       }
       .peers-layout {
         display: flex;
@@ -207,25 +239,47 @@
         display: flex;
         flex-direction: column;
         gap: 16px;
+        /* smooth width change when peer panel opens */
+        transition: flex-basis 0.35s ease, width 0.35s ease;
       }
       .peer-detail-panel {
-        width: 500px;
-        flex-shrink: 0;
         background: #15222c;
         border: 1px solid #20313f;
         border-radius: 18px;
         padding: 20px 24px 26px;
-        display: flex;
+        display: flex; /* keep in flow, but collapsed by default */
         flex-direction: column;
         gap: 16px;
         box-shadow: 0 0 0 1px #1f2c38 inset, 0 8px 26px -12px #000;
         position: relative;
         opacity: 0;
-        transform: translateX(40px);
-        transition: all 0.35s ease;
+        transform: translateX(20px);
         pointer-events: none;
         max-height: 100%;
         overflow: auto;
+        /* collapsed state */
+        flex-basis: 0px;
+        max-width: 0px;
+        width: 0px;
+        flex-shrink: 1;
+        /* animate reveal/collapse smoothly */
+        transition: flex-basis 0.35s ease, max-width 0.35s ease,
+          width 0.35s ease, opacity 0.3s ease, transform 0.35s ease;
+      }
+      /* Compact island tweaks: move interface actions above stats and ensure layout fits tighter */
+      .island.expanded:not(.peer-open) .iface-meta-card {
+        position: relative;
+        padding-right: 220px; /* space for actions block */
+      }
+      .island.expanded:not(.peer-open) .iface-actions {
+        position: absolute;
+        top: 16px;
+        right: 18px;
+        z-index: 1;
+      }
+      .island.expanded:not(.peer-open) .iface-stats {
+        margin-top: 20px;
+        width: 780px;
       }
       .peer-detail-header {
         display: flex;
@@ -364,6 +418,7 @@
         display: grid;
         gap: 12px;
         grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        min-width: 590px;
       }
       .peer-row {
         padding: 12px 14px 14px;
@@ -433,6 +488,8 @@
         align-items: center;
         justify-content: center;
         z-index: 900;
+        min-height: 100vh;
+        overflow-y: auto;
       }
       .peer-modal {
         background: #0f181f;
@@ -445,6 +502,9 @@
         flex-direction: column;
         gap: 20px;
         box-shadow: 0 20px 60px -20px #000, 0 0 0 1px #18242e inset;
+        margin: auto;
+        max-height: 90vh;
+        overflow-y: auto;
       }
       .peer-modal h3 {
         margin: 0;
@@ -514,31 +574,51 @@
         background: #27455e;
         color: #fff;
       }
-      @media (max-width: 960px) {
-        @media (max-width: 1100px) {
-          .island.expanded {
-            flex-direction: column;
-          }
-          .island.expanded .interfaces-panel {
-            width: 100%;
-            border-right: none;
-            border-top: 1px solid #1f2c38;
-            border-radius: 0 0 26px 26px;
-            box-shadow: none;
-            padding: 20px 18px 26px;
-            margin-top: 12px;
-          }
-          .island.expanded .details-region {
-            margin-left: 0;
-          }
-          .peers-layout {
-            flex-direction: column;
-          }
-          .peer-detail-panel {
-            width: 100%;
-            transform: translateY(20px);
-            max-height: none;
-          }
+      @media (max-width: 1100px) {
+        .island-wrapper {
+          min-height: 200px;
+        }
+        .island.expanded {
+          flex-direction: column;
+        }
+        /* On small screens, compact and expanded peer-open share the same full-width behavior */
+        .island.expanded,
+        .island.expanded.peer-open {
+          max-width: 100%;
+          min-height: unset;
+        }
+        .island.expanded .interfaces-panel {
+          width: 100%;
+          border-right: none;
+          border-top: 1px solid #1f2c38;
+          border-radius: 0 0 26px 26px;
+          box-shadow: none;
+          padding: 20px 18px 26px;
+          margin-top: 12px;
+        }
+        .island.expanded .details-region {
+          margin-left: 0;
+        }
+        .peers-layout {
+          flex-direction: column;
+        }
+        .peer-detail-panel {
+          /* on small screens, slide down and occupy full width when open */
+          transform: translateY(20px);
+          max-height: none;
+        }
+        .details-region.peer-open .peer-detail-panel {
+          flex-basis: 100%;
+          max-width: 100%;
+          width: 100%;
+        }
+        /* Reset absolute actions on mobile to avoid overlap */
+        .island.expanded:not(.peer-open) .iface-meta-card {
+          padding-right: 22px;
+        }
+        .island.expanded:not(.peer-open) .iface-actions {
+          position: static;
+          margin-left: auto;
         }
         .peer-list {
           grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -764,6 +844,7 @@
     <div id="qrPeerModal" style="display: none"></div>
     <div id="editPeerModal" style="display: none"></div>
     <div id="deletePeerModal" style="display: none"></div>
+    <div id="deleteInterfaceModal" style="display: none"></div>
     <script>
       const apiBase = document.querySelector('meta[name="api-base"]').content;
       const token = document.querySelector('meta[name="access-token"]').content;
@@ -977,6 +1058,11 @@
         ifaceTitle.textContent = iface;
         ifaceMeta.innerHTML = "";
         peersContainer.innerHTML = "";
+        // Reset to compact (no peer open) when switching/choosing interface
+        islandEl.classList.remove("peer-open");
+        islandEl
+          .querySelector(".details-region")
+          ?.classList.remove("peer-open");
         emptyState.style.display = "block";
         islandEl.classList.add("expanded");
         await loadInterfaceAll();
@@ -1104,8 +1190,10 @@
         if (emptyState) emptyState.style.display = "none";
         if (peerEditor) peerEditor.style.display = "block";
         if (peerEditorTitle) peerEditorTitle.textContent = `Peer: ${p.name}`;
-        if (peerDetailPanel)
+        if (peerDetailPanel) {
           islandEl.querySelector(".details-region")?.classList.add("peer-open");
+          islandEl.classList.add("peer-open");
+        }
         // Fetch detailed peer info
         try {
           const detail = await fetchJSON(
@@ -1354,8 +1442,11 @@
       }
       // Delete peer modal wiring
       const deletePeerModalMount = document.getElementById("deletePeerModal");
+      const deleteInterfaceModalMount = document.getElementById(
+        "deleteInterfaceModal"
+      );
       function buildDeletePeerModal(name) {
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="dpmClose" aria-label="Close">×</button>\n    <h3>Delete Peer</h3>\n    <div style="font-size:14px;color:#cfd8dc;">Are you sure you want to delete peer <b>${name}</b>?</div>\n    <div id="dpmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; margin-top:8px;"></div>\n    <div class="pm-actions">\n      <button type="button" id="dpmCancel" class="btn-danger btn-press">Cancel</button>\n      <button type="button" id="dpmDelete" class="btn-glow">Delete</button>\n    </div>\n  </div>\n</div>`;
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="dpmClose" aria-label="Close">×</button>\n    <h3>Delete Peer</h3>\n    <div style="font-size:14px;color:#cfd8dc;">Are you sure you want to delete peer <b>${name}</b>?</div>\n    <div id="dpmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; margin-top:8px;"></div>\n    <div class="pm-actions">\n      <button type="button" id="dpmCancel" class="btn-press">Cancel</button>\n      <button type="button" id="dpmDelete" class="btn-danger btn-press">Delete</button>\n    </div>\n  </div>\n</div>`;
       }
       async function openDeletePeerModal() {
         if (!currentInterface || !currentPeerName) {
@@ -1402,6 +1493,7 @@
             lastPeerDetail = null;
             const detailsRegion = islandEl.querySelector(".details-region");
             if (detailsRegion) detailsRegion.classList.remove("peer-open");
+            islandEl.classList.remove("peer-open");
             // Refresh peers
             await loadInterfaceAll();
           } catch (err) {
@@ -1411,9 +1503,136 @@
         };
       }
       if (btnDeletePeer) btnDeletePeer.onclick = openDeletePeerModal;
+      // Delete interface modal wiring (mirrors peer deletion)
+      function buildDeleteInterfaceModal(name) {
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="dimClose" aria-label="Close">×</button>\n    <h3>Delete Interface</h3>\n    <div style="font-size:14px;color:#cfd8dc;">Are you sure you want to delete interface <b>${name}</b>? This will remove its config and peers.</div>\n    <div id="dimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; margin-top:8px;"></div>\n    <div class="pm-actions">\n      <button type="button" id="dimCancel" class="btn-press">Cancel</button>\n      <button type="button" id="dimDelete" class="btn-danger btn-press">Delete</button>\n    </div>\n  </div>\n</div>`;
+      }
+      async function openDeleteInterfaceModal() {
+        if (!currentInterface) {
+          showToast("Select an interface first", false);
+          return;
+        }
+        deleteInterfaceModalMount.innerHTML =
+          buildDeleteInterfaceModal(currentInterface);
+        deleteInterfaceModalMount.style.display = "block";
+        const overlay = deleteInterfaceModalMount.querySelector(
+          ".peer-modal-overlay"
+        );
+        const btnClose = deleteInterfaceModalMount.querySelector("#dimClose");
+        const btnCancel = deleteInterfaceModalMount.querySelector("#dimCancel");
+        const btnGo = deleteInterfaceModalMount.querySelector("#dimDelete");
+        const feedback =
+          deleteInterfaceModalMount.querySelector("#dimFeedback");
+        function close() {
+          deleteInterfaceModalMount.style.display = "none";
+          deleteInterfaceModalMount.innerHTML = "";
+        }
+        btnClose.onclick = close;
+        btnCancel.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        btnGo.onclick = async () => {
+          feedback.style.color = "#a0b4c0";
+          feedback.textContent = "Deleting...";
+          try {
+            const name = currentInterface;
+            const res = await fetch(
+              `${apiBase}/interfaces/${encodeURIComponent(name)}`,
+              { method: "DELETE", headers: headers() }
+            );
+            if (!res.ok) {
+              const d = await res.json().catch(() => ({}));
+              throw new Error(d.detail || res.statusText);
+            }
+            const payload = await res.json().catch(() => ({}));
+            // Update interface list from response
+            const list = Array.isArray(payload?.interfaces)
+              ? payload.interfaces
+              : [];
+            const desired = list
+              .map((obj) => ({
+                name: obj && typeof obj === "object" ? obj.name : obj,
+                active: obj && typeof obj === "object" ? !!obj.active : false,
+              }))
+              .filter((x) => !!x.name);
+            const existing = new Map();
+            Array.from(
+              interfacesContainer.querySelectorAll(".iface-item")
+            ).forEach((el) => {
+              const n = el.dataset.name;
+              if (n) existing.set(n, el);
+            });
+            // Remove deleted element (if still present)
+            existing.forEach((el, n) => {
+              if (!desired.find((d) => d.name === n)) {
+                el.remove();
+                existing.delete(n);
+              }
+            });
+            desired.forEach(({ name, active }) => {
+              let el = existing.get(name);
+              if (!el) {
+                el = document.createElement("div");
+                el.className = "iface-item";
+                el.dataset.name = name;
+                el.onclick = () => selectInterface(name);
+                el.innerHTML = `<span class=\"iface-name\"></span><span class=\"iface-pill status-pill small\"></span>`;
+                existing.set(name, el);
+              }
+              el.classList.toggle("active", false);
+              const ns = el.querySelector(".iface-name");
+              if (ns && ns.textContent !== name) ns.textContent = name;
+              const pill = el.querySelector(".iface-pill");
+              if (pill) {
+                pill.classList.toggle("ok", !!active);
+                pill.classList.toggle("bad", !active);
+                pill.textContent = active ? "active" : "inactive";
+                pill.title = active ? "Active" : "Inactive";
+              }
+              interfacesContainer.appendChild(el);
+            });
+            // Show placeholder when empty
+            let ph = interfacesContainer.querySelector(".iface-empty");
+            if (desired.length === 0) {
+              if (!ph) {
+                ph = document.createElement("div");
+                ph.className = "iface-empty";
+                ph.style.cssText =
+                  "padding:14px 16px;font-size:12px;color:#78909c;";
+                ph.textContent = "No interfaces";
+                interfacesContainer.appendChild(ph);
+              }
+            } else if (ph) {
+              ph.remove();
+            }
+            // Deselect current interface and reverse selection animation
+            const detailsRegion = islandEl.querySelector(".details-region");
+            if (detailsRegion) {
+              detailsRegion.classList.remove("peer-open");
+            }
+            islandEl.classList.remove("peer-open");
+            islandEl.classList.remove("expanded");
+            ifaceTitle.textContent = "";
+            ifaceMeta.innerHTML = "";
+            peersContainer.innerHTML = "";
+            emptyState.style.display = "block";
+            clearPeerDetailInterval();
+            clearInterfaceRefreshInterval();
+            document
+              .querySelectorAll(".iface-item")
+              .forEach((i) => i.classList.remove("active"));
+            currentInterface = null;
+            close();
+            showToast("Interface deleted");
+          } catch (err) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = `Error: ${err.message || "Delete failed"}`;
+          }
+        };
+      }
       if (btnDeleteInterface)
-        btnDeleteInterface.onclick = () =>
-          showToast("Interface deletion not implemented yet", false);
+        btnDeleteInterface.onclick = openDeleteInterfaceModal;
       if (btnEnableService)
         btnEnableService.onclick = async () => {
           if (!currentInterface) {
@@ -1791,11 +2010,123 @@
           if (e.target === overlay) close();
         });
         nameInput?.focus();
-        form.addEventListener("submit", (e) => {
+        form.addEventListener("submit", async (e) => {
           e.preventDefault();
-          feedback.style.color = "#ff6b6b";
-          feedback.textContent = "Create not implemented yet";
-          // Intentionally no create logic per request
+          const name = (
+            addInterfaceModalMount.querySelector("#aimName")?.value || ""
+          ).trim();
+          const portStr = (
+            addInterfaceModalMount.querySelector("#aimPort")?.value || ""
+          ).trim();
+          const network = (
+            addInterfaceModalMount.querySelector("#aimNetwork")?.value || ""
+          ).trim();
+          const public_ip = (
+            addInterfaceModalMount.querySelector("#aimPublicIP")?.value || ""
+          ).trim();
+          const ignore =
+            !!addInterfaceModalMount.querySelector("#aimIgnore")?.checked;
+          const port = parseInt(portStr, 10);
+          if (!name) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Name is required";
+            return;
+          }
+          if (!Number.isFinite(port)) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Port is required";
+            return;
+          }
+          if (!network) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Network is required";
+            return;
+          }
+          feedback.style.color = "#a0b4c0";
+          feedback.textContent = "Validating...";
+          try {
+            const validateBody = {
+              interface: name,
+              port,
+              network,
+              ignore_range_check: ignore,
+            };
+            const v = await fetchJSON(`${apiBase}/interfaces/validate`, {
+              method: "POST",
+              headers: headers(),
+              body: JSON.stringify(validateBody),
+            });
+            if (!v || !v.ok) {
+              throw new Error(v?.detail || "Validation failed");
+            }
+            feedback.style.color = "#32c861";
+            feedback.textContent = "Validated. Creating...";
+            const createBody = { interface: name, port, network };
+            if (public_ip) createBody.public_ip = public_ip;
+            const res = await fetchJSON(`${apiBase}/interfaces/add`, {
+              method: "POST",
+              headers: headers(),
+              body: JSON.stringify(createBody),
+            });
+            // Update interface list from returned data
+            const list = Array.isArray(res?.interfaces) ? res.interfaces : [];
+            if (list.length) {
+              const desired = list
+                .map((obj) => ({
+                  name: obj && typeof obj === "object" ? obj.name : obj,
+                  active: obj && typeof obj === "object" ? !!obj.active : false,
+                }))
+                .filter((x) => !!x.name);
+              const existing = new Map();
+              Array.from(
+                interfacesContainer.querySelectorAll(".iface-item")
+              ).forEach((el) => {
+                const n = el.dataset.name;
+                if (n) existing.set(n, el);
+              });
+              existing.forEach((el, n) => {
+                if (!desired.find((d) => d.name === n)) {
+                  el.remove();
+                  existing.delete(n);
+                }
+              });
+              desired.forEach(({ name, active }) => {
+                let el = existing.get(name);
+                if (!el) {
+                  el = document.createElement("div");
+                  el.className = "iface-item";
+                  el.dataset.name = name;
+                  el.onclick = () => selectInterface(name);
+                  el.innerHTML = `<span class="iface-name"></span><span class="iface-pill status-pill small"></span>`;
+                  existing.set(name, el);
+                }
+                el.classList.toggle("active", name === currentInterface);
+                const nameSpan = el.querySelector(".iface-name");
+                if (nameSpan && nameSpan.textContent !== name)
+                  nameSpan.textContent = name;
+                const pill = el.querySelector(".iface-pill");
+                if (pill) {
+                  pill.classList.toggle("ok", !!active);
+                  pill.classList.toggle("bad", !active);
+                  pill.textContent = active ? "active" : "inactive";
+                  pill.title = active ? "Active" : "Inactive";
+                }
+              });
+              desired.forEach(({ name }) => {
+                const el = existing.get(name);
+                if (el) interfacesContainer.appendChild(el);
+              });
+            } else {
+              await loadInterfaces();
+            }
+            close();
+            showToast("Interface created");
+            // Select the newly created interface
+            await selectInterface(name);
+          } catch (err) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = `Error: ${err.message || "Creation failed"}`;
+          }
         });
       }
       if (btnOpenAddInterface)
