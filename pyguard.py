@@ -905,6 +905,29 @@ def restart_wg_interface(interface: str, non_critical_change: bool = False):
         print(f"Interface '{interface}' brought down and up")
 
 
+def rename_interface(interface: str, new_name: str):
+    ensure_root()
+    data = load_data(interface)
+    active = is_interface_active(interface)
+    if new_name == interface:
+        print("Error: New name is the same as the current name")
+        return False
+    ok, meta = validate_new_interface(
+        new_name, 0, "", ignore_network=True, ignore_range_check=True, ignore_port=True
+    )
+
+    if not ok:
+        print(f"Error: {meta['error']}")
+        return False
+
+    delete_interface(interface)
+    save_data(new_name, data)
+    print(f"Renamed interface '{interface}' to '{new_name}'")
+    if active:
+        restart_wg_interface(interface)
+    return True
+
+
 def generate_config(
     interface: str, data: dict | None = None, non_critical_change: bool = False
 ):
@@ -1243,10 +1266,11 @@ def update_config(interface: str, target: str, parameter: str, value: str):
                 data["server"]["ip"] = str(next(new_net.hosts()))
                 print(f"Server IP set to {data['server']['ip']}")
 
-            for peer in data.get("peers", {}).values():
+            for peer_name in data.get("peers", {}).keys():
+                peer = data.get("peers", {}).get(peer_name, {})
                 if ipaddress.ip_address(peer["ip"]) not in new_net:
                     peer["ip"] = get_next_ip(interface, value)
-                    print(f"Peer {peer['name']} IP moved to {peer['ip']}")
+                    print(f"Peer {peer_name} IP moved to {peer['ip']}")
 
             save_data(interface, data)
             print(f"Network updated: {value}")
@@ -1419,6 +1443,17 @@ def main():
             i += 1
         init_server(interface, port=port, network=net, public_ip=pub)
         return
+    elif sys.argv[1] == "delete":
+        to_delete = sys.argv[2:]
+        for interface in to_delete:
+            try:
+                delete_interface(interface)
+            except Exception as e:
+                print(f"Error deleting interface {interface}: {e}")
+            print("-" * 40)
+        print("Done!")
+        return
+
     # Interface-first flow
     interface = sys.argv[1]
     if len(sys.argv) == 2:
@@ -1474,6 +1509,12 @@ def main():
                     as_json=json_mode,
                     print_output=True,
                 )
+        elif command == "rename":
+            if not args:
+                print("Usage: pyguard <iface> rename <new_name>")
+                return
+            new_name = args[0]
+            rename_interface(interface, new_name)
         elif command == "custom":
             if len(args) < 2:
                 print(

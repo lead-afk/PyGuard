@@ -336,10 +336,16 @@ class InitInterfaceReq(BaseModel):
 
 
 class UpdateServerReq(BaseModel):
+    name: str | None = None
     port: int | None = None
     dns: str | None = None
     public_ip: str | None = None
     network: str | None = None
+
+    old_port: int | None = None
+    old_dns: str | None = None
+    old_public_ip: str | None = None
+    old_network: str | None = None
 
 
 class AddPeerReq(BaseModel):
@@ -470,13 +476,13 @@ def api_get_interface(interface: str, _=Depends(require_jwt)):
 @app.post("/interfaces/{interface}/delete")
 def api_delete_interface(interface: str, _=Depends(require_jwt)):
     # Lazy import delete (avoids circular)
-    from pyguard import delete_interface
 
     path = data_path(interface)
     if isinstance(path, str):
         path = Path(path)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Interface not found")
+    print("Deleting interface:", interface)
     delete_interface(interface)
     data = list_interfaces()
     return {"deleted": True, "interface": interface, "interfaces": data}
@@ -514,23 +520,38 @@ def api_validate_interface(req: ValidateInterface, _=Depends(require_jwt)):
 @app.post("/interfaces/{interface}/server/update")
 def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jwt)):
     # Apply each provided field using CLI core update_config semantics
-    provided = False
-    if req.port is not None:
+
+    if req.port is not None and req.port != req.old_port:
         update_config(interface, "port", "port", str(req.port))
-        provided = True
-    if req.dns is not None:
+    if req.dns is not None and req.dns != req.old_dns:
         update_config(interface, "dns", "dns", req.dns)
-        provided = True
-    if req.public_ip is not None:
+    if req.public_ip is not None and req.public_ip != req.old_public_ip:
         update_config(interface, "public-ip", "public-ip", req.public_ip)
-        provided = True
-    if req.network is not None:
+    if req.network is not None and req.network != req.old_network:
         update_config(interface, "network", "network", req.network)
-        provided = True
-    if not provided:
-        raise HTTPException(status_code=400, detail="No updatable fields supplied")
+
+    if req.name is not None and interface != req.name:
+        rename_interface(interface, req.name)
+        interface = req.name
+
     d = load_data(interface)
-    return {"interface": interface, "server": _filter_server(d.get("server", {}))}
+    if not d.get("server").get("private_key"):
+        raise HTTPException(status_code=500, detail="Failed to initialize server")
+    data = list_interfaces()
+    try:
+        peers_obj = get_peers_info(interface, specific_peer=None)
+    except Exception as e:
+        logging.exception("Failed gathering peer info for %s: %s", interface, e)
+        peers_obj = None
+    resp = {
+        "interface": interface,
+        "server": _filter_server(d.get("server", {})),
+        "peers": peers_obj,
+        "peer_count": len(peers_obj) if peers_obj else len(d.get("peers", {})),
+        "active": is_interface_active(interface),
+    }
+    print("Successful initialization of interface:", interface)
+    return {"interface": interface, "interfaces": data, "new_data": resp}
 
 
 @app.get("/interfaces/{interface}/next_available")

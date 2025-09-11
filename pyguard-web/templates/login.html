@@ -67,25 +67,51 @@
         flex-direction: column;
         gap: 18px;
       }
-      .auth-head { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; margin-bottom:6px; text-align:center; }
-      .auth-head img { width:56px; height:auto; }
-      .auth-head h2 { margin:0; font-size:22px; letter-spacing:.5px; }
+      .auth-head {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 6px;
+        text-align: center;
+      }
+      .auth-head img {
+        width: 56px;
+        height: auto;
+      }
+      .auth-head h2 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: 0.5px;
+      }
       .auth-sub {
         font-size: 13px;
         color: #9db1bf;
         margin-top: -6px;
-        text-align:center;
+        text-align: center;
       }
-      .auth-actions { display:flex; justify-content:center; }
+      .auth-actions {
+        display: flex;
+        justify-content: center;
+      }
       .login-btn {
         width: 200px;
       }
-  /* Ensure form and inputs span full island width */
-  .login-form { width: 100%; }
-  .login-form .pw-field { width:100% !important; }
-  .login-form .field input { box-sizing: border-box; }
+      /* Ensure form and inputs span full island width */
+      .login-form {
+        width: 100%;
+      }
+      .login-form .pw-field {
+        width: 100% !important;
+      }
+      .login-form .field input {
+        box-sizing: border-box;
+      }
       /* Make password input span full width of island */
-      .login-form .pw-field { width:100%; }
+      .login-form .pw-field {
+        width: 100%;
+      }
       .error {
         background: #3a1b1b;
         border: 1px solid #6b2e2e;
@@ -131,7 +157,15 @@
         {% endif %}
         <form class="login-form" method="post" action="/login">
           <div class="field">
-            <input type="text" name="username" value="admin" placeholder="Username" class="readonly" disabled aria-disabled="true" />
+            <input
+              type="text"
+              name="username"
+              value="admin"
+              placeholder="Username"
+              class="readonly"
+              disabled
+              aria-disabled="true"
+            />
           </div>
           <div class="field">
             <input
