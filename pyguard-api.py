@@ -273,6 +273,36 @@ def require_jwt(authorization: str = Header(None)):
 class RefreshReq(BaseModel):
     refresh_token: str
 
+class ChangePasswordReq(BaseModel):
+    old_password: str
+    new_password: str
+
+@app.post("/change-password")
+def api_change_password(req: ChangePasswordReq, _=Depends(require_jwt)):
+    """Change the admin password (requires valid access token)."""
+    h_conf = load_admin_hash()
+    if not h_conf:
+        raise HTTPException(
+            status_code=500, detail="Admin password not configured on server"
+        )
+    try:
+        ok = bcrypt.checkpw(req.old_password.encode(), h_conf.encode())
+    except Exception:
+        raise HTTPException(status_code=500, detail="Password verification failed")
+    if not ok:
+        raise HTTPException(status_code=401, detail="Invalid current password")
+
+    if len(req.new_password) < 1:
+        raise HTTPException(status_code=400, detail="New password too short (min 1 char)")
+
+    try:
+        new_hash = bcrypt.hashpw(req.new_password.encode(), bcrypt.gensalt()).decode()
+        ADMIN_PASS_HASH_PATH.write_text(new_hash)
+        os.chmod(ADMIN_PASS_HASH_PATH, stat.S_IRUSR | stat.S_IWUSR)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed saving new password: {e}")
+
+    return {"changed": True}
 
 @app.post("/refresh")
 def refresh(req: RefreshReq):
