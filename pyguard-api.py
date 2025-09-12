@@ -39,8 +39,9 @@ from pathlib import Path
 import secrets
 import os
 import stat
-from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request, Response
+from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
 from pydantic import BaseModel
 import bcrypt
@@ -60,6 +61,7 @@ REFRESH_EXP_SECONDS = 60 * 60 * 24
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("pyguard-api")
 
+security = HTTPBearer()
 app = FastAPI(title="pyguard API (starter)")
 
 # CORS: allow web dashboard (localhost:6656) to call API with Authorization header
@@ -138,11 +140,6 @@ def root_status(request: Request):
         "status": "ok",
     }
 
-
-class LoginReq(BaseModel):
-    password: str
-
-
 def ensure_data_dir():
     try:
         DATA_DIR.mkdir(mode=0o700, exist_ok=True)
@@ -161,27 +158,54 @@ def load_admin_hash():
     except Exception:
         return None
 
-def _issue_access_token() -> str:
-    now = datetime.utcnow()
-    payload = {
-        "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(seconds=ACCESS_EXP_SECONDS)).timestamp()),
+def _issue_access_token(user_data) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {    
+        "iat": now,
+        "exp": now + timedelta(seconds=ACCESS_EXP_SECONDS),
         "type": "access",
+        "user": user_data
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
 
-def _issue_refresh_token() -> str:
-    now = datetime.utcnow()
+def _issue_refresh_token(user_data) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
-        "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(seconds=REFRESH_EXP_SECONDS)).timestamp()),
+        "iat": now,
+        "exp": now + timedelta(seconds=REFRESH_EXP_SECONDS),
         "type": "refresh",
+        "user": user_data
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
 
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+        
+        return {
+            "expires_at": payload['exp'],
+            **payload['user']
+        }
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+class LoginReq(BaseModel):
+    username: str
+    password: str
+
+class RefreshReq(BaseModel):
+    refresh_token: str
+
+class ChangePasswordReq(BaseModel):
+    old_password: str
+    new_password: str
 
 @app.post("/login")
-def login(payload: LoginReq):
+def login(req: LoginReq):
     """Verify password and return access + refresh tokens."""
     h_conf = ADMIN_PASS_HASH
     if not h_conf:
@@ -189,14 +213,17 @@ def login(payload: LoginReq):
             status_code=500, detail="Admin password not configured on server"
         )
     try:
-        ok = bcrypt.checkpw(payload.password.encode(), h_conf.encode())
+        ok = bcrypt.checkpw(req.password.encode(), h_conf.encode())
     except Exception:
         raise HTTPException(status_code=500, detail="Password verification failed")
     if not ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = _issue_access_token()
-    refresh = _issue_refresh_token()
+    user_data = {
+        "username": req.username,
+    }
+    token = _issue_access_token(user_data)
+    refresh = _issue_refresh_token(user_data)
 
     return {
         "access_token": token,
@@ -205,6 +232,31 @@ def login(payload: LoginReq):
         "refresh_token": refresh,
     }
 
+@app.post("/refresh")
+def refresh(req: RefreshReq):
+    """Exchange a valid refresh token for a new short-lived access JWT."""
+    try:
+        payload = jwt.decode(req.refresh_token, JWT_SECRET_KEY, algorithms=["HS256"])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=403, detail="Wrong token type")
+    except:
+        raise HTTPException(status_code=403, detail="Invalid refresh token")
+
+    token = _issue_access_token(payload.user)
+    refresh = _issue_refresh_token(payload.user)
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_EXP_SECONDS,
+        "refresh_token": refresh,
+    }
+
+@app.get('/user')
+def get_user_info(user=Depends(get_current_user)):
+    print(user)
+
+    return user
 
 def require_jwt(authorization: str = Header(None)):
     """Require a valid Bearer JWT signed with the server secret."""
@@ -224,14 +276,6 @@ def require_jwt(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=403, detail="Invalid token")
-
-
-class RefreshReq(BaseModel):
-    refresh_token: str
-
-class ChangePasswordReq(BaseModel):
-    old_password: str
-    new_password: str
 
 @app.post("/change-password")
 def api_change_password(req: ChangePasswordReq, _=Depends(require_jwt)):
@@ -259,33 +303,6 @@ def api_change_password(req: ChangePasswordReq, _=Depends(require_jwt)):
         raise HTTPException(status_code=500, detail=f"Failed saving new password: {e}")
 
     return {"changed": True}
-
-@app.post("/refresh")
-def refresh(req: RefreshReq):
-    """Exchange a valid refresh token for a new short-lived access JWT."""
-    try:
-        payload = jwt.decode(req.refresh_token, JWT_SECRET_KEY, algorithms=["HS256"])
-        if payload.get("type") != "refresh":
-            raise HTTPException(status_code=403, detail="Wrong token type")
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Refresh token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=403, detail="Invalid refresh token")
-
-    token = _issue_access_token()
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "expires_in": ACCESS_EXP_SECONDS,
-    }
-
-
-@app.get("/status")
-def status(_payload=Depends(require_jwt)):
-    return {
-        "admin_hash_exists": ADMIN_PASS_HASH_PATH.exists(),
-    }
-
 
 # ---------------------------------------------------------------------------
 # PyGuard management endpoints (all require valid JWT)
