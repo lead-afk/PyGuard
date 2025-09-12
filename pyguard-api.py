@@ -32,6 +32,9 @@ Call:
   curl -X POST -H "Content-Type: application/json" -d '{"username":"admin","password":"..."}' http://127.0.0.1:8000/login
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from pathlib import Path
 import secrets
 import os
@@ -45,12 +48,14 @@ import jwt
 from datetime import datetime, timedelta, timezone
 import secrets as _secrets
 
+
 # File locations (server-side)
 DATA_DIR = Path("/etc/pyguard")
 ADMIN_PASS_HASH_PATH = DATA_DIR / "admin.pass.hash"
-API_KEY_PATH = DATA_DIR / "api_key"
-TOKEN_EXP_SECONDS = 3600  # 1 hour
-REFRESH_TOKEN_PATH = DATA_DIR / "refresh_token"
+ADMIN_PASS_HASH = ""
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret_key_change_me")
+ACCESS_EXP_SECONDS = 60 * 15
+REFRESH_EXP_SECONDS = 60 * 60 * 24
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("pyguard-api")
@@ -147,78 +152,29 @@ def load_admin_hash():
     except Exception:
         return None
 
-
-def load_api_key() -> str | None:
-    try:
-        return API_KEY_PATH.read_text().strip()
-    except Exception:
-        return None
-
-
-def save_api_key(key: str):
-    try:
-        API_KEY_PATH.write_text(key)
-        os.chmod(API_KEY_PATH, stat.S_IRUSR | stat.S_IWUSR)
-    except Exception as e:
-        raise
-
-
-def ensure_api_key() -> str:
-    """Return existing API key or create a new one and persist it."""
-    ensure_data_dir()
-    k = load_api_key()
-    if k:
-        return k
-    # generate a URL-safe token
-    k = _secrets.token_urlsafe(64)
-    save_api_key(k)
-    return k
-
-
-def load_refresh_token() -> str | None:
-    try:
-        return REFRESH_TOKEN_PATH.read_text().strip()
-    except Exception:
-        return None
-
-
-def save_refresh_token(token: str):
-    try:
-        REFRESH_TOKEN_PATH.write_text(token)
-        os.chmod(REFRESH_TOKEN_PATH, stat.S_IRUSR | stat.S_IWUSR)
-    except Exception:
-        raise
-
-
-SECRET = "super_secret_key"  # w env lub pliku
-ACCESS_EXP_SECONDS = 60 * 15
-REFRESH_EXP_SECONDS = 60 * 60 * 24
-
-
 def _issue_access_token() -> str:
     now = datetime.utcnow()
     payload = {
-        "iat": now,
-        "exp": now + timedelta(seconds=ACCESS_EXP_SECONDS),
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=ACCESS_EXP_SECONDS)).timestamp()),
         "type": "access",
     }
-    return jwt.encode(payload, SECRET, algorithm="HS256")
-
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
 
 def _issue_refresh_token() -> str:
     now = datetime.utcnow()
     payload = {
-        "iat": now,
-        "exp": now + timedelta(seconds=REFRESH_EXP_SECONDS),
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=REFRESH_EXP_SECONDS)).timestamp()),
         "type": "refresh",
     }
-    return jwt.encode(payload, SECRET, algorithm="HS256")
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
 
 
 @app.post("/login")
 def login(payload: LoginReq):
     """Verify password and return access + refresh tokens."""
-    h_conf = load_admin_hash()
+    h_conf = ADMIN_PASS_HASH
     if not h_conf:
         raise HTTPException(
             status_code=500, detail="Admin password not configured on server"
@@ -248,7 +204,7 @@ def require_jwt(authorization: str = Header(None)):
 
     token = authorization.split(" ", 1)[1]
     try:
-        payload = jwt.decode(token, SECRET, algorithms=["HS256"])
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
         if payload.get("type") != "access":
             raise HTTPException(status_code=403, detail="Wrong token type")
         log.debug(
@@ -269,7 +225,7 @@ class RefreshReq(BaseModel):
 def refresh(req: RefreshReq):
     """Exchange a valid refresh token for a new short-lived access JWT."""
     try:
-        payload = jwt.decode(req.refresh_token, SECRET, algorithms=["HS256"])
+        payload = jwt.decode(req.refresh_token, JWT_SECRET_KEY, algorithms=["HS256"])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=403, detail="Wrong token type")
     except jwt.ExpiredSignatureError:
@@ -285,26 +241,10 @@ def refresh(req: RefreshReq):
     }
 
 
-@app.post("/logout")
-def logout(req: RefreshReq):
-    """Revoke the configured refresh token (if it matches the provided one)."""
-    stored = load_refresh_token()
-    if not stored:
-        return {"revoked": False}
-    if not _secrets.compare_digest(req.refresh_token, stored):
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
-    try:
-        REFRESH_TOKEN_PATH.unlink()
-    except Exception:
-        pass
-    return {"revoked": True}
-
-
 @app.get("/status")
 def status(_payload=Depends(require_jwt)):
     return {
         "admin_hash_exists": ADMIN_PASS_HASH_PATH.exists(),
-        "api_key_exists": API_KEY_PATH.exists(),
     }
 
 

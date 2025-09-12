@@ -123,6 +123,7 @@ Desktop.ini
 # dotenv
 .env
 .env.*
+!.env.example
 .venv/
 venv/
 ENV/
