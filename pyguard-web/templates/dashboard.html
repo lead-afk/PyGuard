@@ -3,8 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <title>PyGuard Dashboard</title>
-    <meta name="api-base" content="{{ api_base }}" />
-    <meta name="access-token" content="{{ access_token }}" />
     <link rel="stylesheet" href="/static/style.css" />
     <style>
       body,
@@ -874,8 +872,13 @@
                       <label>Public Key</label
                       ><input id="detailPublicKey" readonly />
                     </div>
-                    <div class="peer-field">
-                      <label>IP</label><input id="detailIP" readonly />
+                    <div class="peer-field dual-traffic">
+                      <div class="traffic-col">
+                        <label>IP</label><input id="detailIP" readonly />
+                      </div>
+                      <div class="traffic-col">
+                        <label>Endpoint</label><input id="detailEndpoint" readonly />
+                      </div>
                     </div>
                     <div class="peer-field dual-traffic">
                       <div class="traffic-col">
@@ -913,12 +916,10 @@
     <div id="deleteInterfaceModal" style="display: none"></div>
     <div id="logoutModal" style="display: none"></div>
     <script>
-      const apiBase = document.querySelector('meta[name="api-base"]').content;
-      const token = document.querySelector('meta[name="access-token"]').content;
-      console.log("[PyGuard] Dashboard script start. apiBase=", apiBase);
-      if (!token) console.warn("[PyGuard] Missing access token meta");
+      // Backend proxy: all API calls go through /proxy so we avoid exposing raw API & token
+      const apiBase = '/proxy';
+      console.log("[PyGuard] Dashboard script start (proxy mode). apiBase=", apiBase);
       const headers = () => ({
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       });
       const interfacesContainer = document.getElementById(
@@ -945,6 +946,7 @@
       const btnQrPeer = document.getElementById("btnQrPeer");
       const detailPublicKey = document.getElementById("detailPublicKey");
       const detailIP = document.getElementById("detailIP");
+  const detailEndpoint = document.getElementById("detailEndpoint");
       const detailDownload = document.getElementById("detailDownload");
       const detailUpload = document.getElementById("detailUpload");
       const detailHandshake = document.getElementById("detailHandshake");
@@ -1263,6 +1265,7 @@
         const fields = [
           detailPublicKey,
           detailIP,
+          detailEndpoint,
           detailDownload,
           detailUpload,
           detailHandshake,
@@ -1342,6 +1345,7 @@
               peerDetailTitle.textContent = p.name;
               detailPublicKey.value = d.public_key || p.public_key || "";
               detailIP.value = d.ip || "";
+              detailEndpoint.value = d.endpoint || "";
               const runtime = detail.runtime || {};
               detailDownload.value = runtime.rx_human || p.download || "";
               detailUpload.value = runtime.tx_human || p.uploaded || "";
@@ -1389,6 +1393,7 @@
               peerDetailTitle.textContent = p.name;
               detailPublicKey.value = p.public_key || "";
               detailIP.value = "";
+              detailEndpoint.value = "";
               detailDownload.value = p.download || "";
               detailUpload.value = p.uploaded || "";
               detailHandshake.value = p.last_handshake_str || "—";
@@ -1430,6 +1435,10 @@
           );
           if (!detail || !detail.peer_data) return;
           const runtime = detail.runtime || {};
+          // Update endpoint (unlikely to change often but keep fresh)
+          if (detail?.peer_data?.endpoint && detailEndpoint) {
+            detailEndpoint.value = detail.peer_data.endpoint;
+          }
           // Update peer detail panel fields if still selected
           if (peerDetailTitle.textContent.trim() === currentPeerName) {
             // traffic + handshake

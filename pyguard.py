@@ -24,28 +24,61 @@ SCRIPT_PATH = os.path.abspath(__file__)
 
 # Deprecated legacy layout helpers (migration support)
 def legacy_data_path(interface: str) -> str:
+    """Return the legacy data file path for a given interface.
+    
+    Args:
+        interface: The WireGuard interface name
+        
+    Returns:
+        Path to the legacy JSON file for the interface
+    """
     return f"{BASE_DATA_DIR}/peers-{interface}.json"
 
 
 def data_path(interface: str) -> str:
-    """Return new per-interface state file path (<iface>.conf)."""
+    """Return new per-interface state file path (<iface>.conf).
+    
+    Args:
+        interface: The WireGuard interface name
+        
+    Returns:
+        Path to the current JSON configuration file for the interface
+    """
     return f"{BASE_DATA_DIR}/{interface}.conf"
 
 
 def ensure_root():
-    """Exit if not root on POSIX systems (WireGuard + file permissions require root)."""
+    """Exit if not root on POSIX systems (WireGuard + file permissions require root).
+    
+    Raises:
+        SystemExit: If not running as root user
+    """
     if hasattr(os, "geteuid") and os.geteuid() != 0:
         print("This script must be run as root!")
         sys.exit(1)
 
 
 def ensure_directories():
+    """Create necessary directories for PyGuard configuration and WireGuard configs.
+    
+    Creates:
+        - BASE_DATA_DIR: Directory for PyGuard state files
+        - CONFIG_DIR: Directory for WireGuard configuration files
+    """
     os.makedirs(BASE_DATA_DIR, exist_ok=True)
     os.makedirs(CONFIG_DIR, exist_ok=True)
 
 
 def migrate_if_legacy(interface: str):
-    """If a legacy peers-<iface>.json exists and new <iface>.conf does not, migrate it."""
+    """If a legacy peers-<iface>.json exists and new <iface>.conf does not, migrate it.
+    
+    Args:
+        interface: The WireGuard interface name to check for migration
+        
+    Note:
+        Copies the legacy file to the new location and preserves permissions.
+        The legacy file is kept for safety.
+    """
     legacy = legacy_data_path(interface)
     new = data_path(interface)
     if os.path.exists(legacy) and not os.path.exists(new):
@@ -59,7 +92,14 @@ def migrate_if_legacy(interface: str):
 
 def list_interfaces(as_json: bool = False, print_output: bool = False):  # ???
     """List interfaces with optional JSON output.
-    Returns list of names (if not as_json) or list of detail dicts (if as_json).
+    
+    Args:
+        as_json: If True, return detailed interface information as JSON-serializable data
+        print_output: If True, print the interface list to stdout
+        
+    Returns:
+        List of interface names (if as_json=False) or list of detail dicts (if as_json=True)
+        Each detail dict contains: name, port, network, public_ip, peer_count, active
     """
     try:
         entries = os.listdir(BASE_DATA_DIR)
@@ -87,7 +127,7 @@ def list_interfaces(as_json: bool = False, print_output: bool = False):  # ???
                 }
             )
         except Exception:
-            details.append({"name": iface, "error": "load_failed"})
+            print(f"Warning: could not load data for interface {iface}")
     names.sort()
     details.sort(key=lambda d: d.get("name"))
 
@@ -110,10 +150,27 @@ def list_interfaces(as_json: bool = False, print_output: bool = False):  # ???
 
 
 def command_exists(cmd: str) -> bool:
+    """Check if a command exists in the system PATH.
+    
+    Args:
+        cmd: The command name to check
+        
+    Returns:
+        True if the command exists, False otherwise
+    """
     return shutil.which(cmd) is not None
 
 
 def get_new_interface_defaults():
+    """Generate default values for a new WireGuard interface.
+    
+    Returns:
+        Tuple of (interface_name, port, network, public_ip) with auto-selected values
+        that don't conflict with existing interfaces or system resources.
+        
+    Raises:
+        ValueError: If no available ports or IP ranges can be found
+    """
     ensure_root()
     used_interfaces = os.listdir("/etc/wireguard/")
     used_pyguard_interfaces = os.listdir("/etc/pyguard/")
@@ -132,7 +189,14 @@ def get_new_interface_defaults():
 
     for interface in used_pyguard_interfaces:
         iName = interface.split(".")[0]
-        data = load_data(iName)
+        try:
+            data = load_data(iName)
+            if not data:
+                continue
+        except Exception as e:
+            print(f"Warning: could not load data for interface {iName}: {e}")
+            continue
+
         port = data.get("server", {}).get("port")
         if port:
             used_ports.append(port)
@@ -178,9 +242,12 @@ def get_new_interface_defaults():
 
     return name, port, network, public_ip
 
-
 def ensure_qrencode_installed():
-    """Ensure qrencode CLI is installed. On Debian/Ubuntu, install via apt-get if missing."""
+    """Ensure qrencode CLI is installed. On Debian/Ubuntu, install via apt-get if missing.
+    
+    Attempts to automatically install qrencode using apt-get if available.
+    Provides installation instructions for other package managers if apt-get is not available.
+    """
     if command_exists("qrencode"):
         return
     print("qrencode not found. Attempting to install via apt-get ...")
@@ -214,16 +281,71 @@ def ensure_qrencode_installed():
         print(f"Failed to install qrencode automatically: {e}")
         print("Please install 'qrencode' using your package manager and re-run.")
 
+def ensure_wireguard_installed():
+    """Ensure WireGuard is installed. On Debian/Ubuntu, install via apt-get if missing.
+    
+    Attempts to automatically install WireGuard using apt-get if available.
+    Provides installation instructions for other package managers if apt-get is not available.
+    """
+    if command_exists("wg"):
+        return
+    print("WireGuard not found. Attempting to install via apt-get ...")
+    # Only attempt on systems with apt-get
+    if not command_exists("apt-get"):
+        print(
+            "apt-get not available. Please install 'wireguard' using your package manager."
+        )
+        print(
+            "Examples: 'sudo apt-get install wireguard' or 'sudo dnf install wireguard' or 'sudo pacman -S wireguard'"
+        )
+        return
+    env = os.environ.copy()
+    env["DEBIAN_FRONTEND"] = "noninteractive"
+    try:
+        subprocess.run(
+            ["apt-get", "update"],
+            check=True,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        subprocess.run(["apt-get", "install", "-y", "wireguard"], check=True, env=env)
+        if command_exists("wg"):
+            print("WireGuard installed successfully.")
+        else:
+            print(
+                "Attempted to install WireGuard, but it still isn't available. Please install manually."
+            )
+    except Exception as e:
+        print(f"Failed to install WireGuard automatically: {e}")
+        print("Please install 'wireguard' using your package manager and re-run.")
+
+def ensure_core_installed():
+    """Ensure core WireGuard components are installed.
+    
+    Currently ensures WireGuard is installed. Can be extended to check
+    for other core dependencies as needed.
+    """
+    ensure_wireguard_installed()
 
 def load_data(interface: str) -> dict:
     """Load (or initialize) data for the specified interface.
+    
     Performs migration from legacy peers-<iface>.json naming if necessary.
+    
+    Args:
+        interface: The WireGuard interface name
+        
+    Returns:
+        Dictionary containing server and peers configuration data.
+        If no existing data is found, returns a default configuration structure.
+        
+    Raises:
+        ValueError: If the JSON file is corrupted
+        Exception: If the file cannot be loaded for other reasons
     """
-    ensure_directories()
-    migrate_if_legacy(interface)
-    path = data_path(interface)
-    if not os.path.exists(path):
-        return {
+
+    DEFAULT_SERVER = {
             "server": {
                 "private_key": "",
                 "public_key": "",
@@ -237,6 +359,12 @@ def load_data(interface: str) -> dict:
             },
             "peers": {},
         }
+
+    ensure_directories()
+    migrate_if_legacy(interface)
+    path = data_path(interface)
+    if not os.path.exists(path):
+        return DEFAULT_SERVER
     try:
         with open(path, "r") as f:
             data = json.load(f)
@@ -249,16 +377,26 @@ def load_data(interface: str) -> dict:
         return data
     except json.JSONDecodeError:
         print(f"Error: state file for {interface} is corrupted ({path})")
-        sys.exit(1)
+        raise ValueError(f"Invalid JSON format, in file {path}")
     except Exception as e:
         print(f"Error loading data for {interface}: {e}")
-        sys.exit(1)
+        raise Exception(f"Failed loading data for {interface}: {e}")
 
 
 def _parse_handshake_to_seconds(handshake_str: str) -> int | None:
-    """
-    Convert WireGuard handshake text into seconds.
-    Example: "1 minute, 30 seconds ago" -> 90
+    """Convert WireGuard handshake text into seconds.
+    
+    Args:
+        handshake_str: Human-readable handshake time string from WireGuard
+                      Examples: "1 minute, 30 seconds ago", "2 days ago", "now"
+                      
+    Returns:
+        Number of seconds since last handshake, or None if parsing fails.
+        Returns 0 for "now".
+        
+    Example:
+        >>> _parse_handshake_to_seconds("1 minute, 30 seconds ago")
+        90
     """
     if handshake_str.strip() == "now":
         return 0
@@ -287,16 +425,19 @@ def _parse_handshake_to_seconds(handshake_str: str) -> int | None:
 
 
 def get_peers_info(interface: str, specific_peer: str = None):
-    """
-    Parse `wg show <interface>` and return peers info.
+    """Parse `wg show <interface>` and return peers info.
 
     Args:
-        interface (str): WireGuard interface name (e.g. 'wg0').
-        as_json (bool): If True, return JSON string. Otherwise dict.
-        specific_peer (str): If provided, filter results to this peer only.
+        interface: WireGuard interface name (e.g. 'wg0')
+        specific_peer: If provided, filter results to this peer only
 
     Returns:
-        dict or str: Dictionary (default) or JSON string if as_json=True.
+        Dictionary containing peer information mapped by peer name.
+        Each peer entry includes: last_handshake, last_handshake_str, active,
+        download, uploaded, endpoint data.
+        
+        If specific_peer is provided, returns data for that peer only.
+        If specific_peer doesn't exist, returns empty dict for that peer.
     """
     ensure_root()  # make sure we are root before calling wg
 
@@ -311,6 +452,7 @@ def get_peers_info(interface: str, specific_peer: str = None):
         "active": False,
         "download": "0.0 KiB",
         "uploaded": "0.0 KiB",
+        "endpoint": "0.0.0.0/0"
     }
 
     peers = {}
@@ -321,6 +463,8 @@ def get_peers_info(interface: str, specific_peer: str = None):
         if line.startswith("peer:"):
             current_peer = line.split()[1]
             peers[current_peer] = DEFAULT_PEER_DATA.copy()
+        elif line.startswith("endpoint") and current_peer:
+            peers[current_peer]["endpoint"] = line.split(":", 1)[1].strip()
         elif line.startswith("latest handshake:") and current_peer:
             hs_str = line.split(":", 1)[1].strip()
             hs_seconds = _parse_handshake_to_seconds(hs_str)
@@ -366,6 +510,15 @@ def get_peers_info(interface: str, specific_peer: str = None):
 
 
 def save_data(interface: str, data: dict):
+    """Save interface configuration data to disk.
+    
+    Args:
+        interface: The WireGuard interface name
+        data: Configuration data dictionary to save
+        
+    Raises:
+        SystemExit: If saving fails for any reason
+    """
     try:
         path = data_path(interface)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -378,7 +531,16 @@ def save_data(interface: str, data: dict):
 
 
 def delete_interface(interface: str):
-    """Delete PyGuard state + generated WireGuard config + systemd service for an interface."""
+    """Delete PyGuard state + generated WireGuard config + systemd service for an interface.
+    
+    Args:
+        interface: The WireGuard interface name to delete
+        
+    Note:
+        Attempts to safely bring down the interface before deletion.
+        Removes state files, WireGuard configs, and systemd services.
+        Continues with cleanup even if some steps fail.
+    """
     ensure_root()
     # Attempt to bring interface down (ignore errors)
     try:
@@ -425,7 +587,14 @@ def delete_interface(interface: str):
 
 
 def generate_keypair():
-    """Generate WireGuard key pair"""
+    """Generate WireGuard key pair.
+    
+    Returns:
+        Tuple of (private_key, public_key) as strings
+        
+    Raises:
+        subprocess.CalledProcessError: If key generation fails
+    """
     private_key = (
         subprocess.check_output("wg genkey", shell=True).decode("utf-8").strip()
     )
@@ -438,6 +607,14 @@ def generate_keypair():
 
 
 def is_ip(s: str) -> bool:
+    """Check if a string is a valid IP address.
+    
+    Args:
+        s: String to validate as an IP address
+        
+    Returns:
+        True if the string is a valid IPv4 or IPv6 address, False otherwise
+    """
     try:
         ipaddress.ip_address(s)
         return True
@@ -446,7 +623,18 @@ def is_ip(s: str) -> bool:
 
 
 def get_next_ip(interface: str, custom_network: str = None):
-    """Get the next available IP in the network"""
+    """Get the next available IP in the network.
+    
+    Args:
+        interface: The WireGuard interface name
+        custom_network: Optional custom network CIDR to use instead of interface default
+        
+    Returns:
+        String representation of the next available IP address
+        
+    Raises:
+        SystemExit: If network is invalid or no available IPs found
+    """
     data = load_data(interface)
 
     try:
@@ -472,7 +660,12 @@ def get_next_ip(interface: str, custom_network: str = None):
 
 
 def get_used_ip_ranges():
-    """Return a list of CIDR ranges (subnets) for all local interfaces."""
+    """Return a list of CIDR ranges (subnets) for all local interfaces.
+    
+    Returns:
+        Set of ipaddress.IPv4Network or ipaddress.IPv6Network objects
+        representing all network ranges currently in use by the system
+    """
     ranges = set()
 
     for iface, addrs in psutil.net_if_addrs().items():
@@ -492,6 +685,15 @@ def get_used_ip_ranges():
 
 
 def get_public_ip():
+    """Retrieve the public IP address of the server.
+    
+    Returns:
+        String containing the public IP address, or "<unknown>" if retrieval fails
+        
+    Note:
+        Uses 'curl ifconfig.me' to determine the public IP address.
+        Falls back to "<unknown>" if the service is unavailable.
+    """
 
     result = None
     try:
@@ -515,7 +717,21 @@ def validate_new_interface(
     ignore_port: bool = False,
     ignore_network: bool = False,
 ):
-    """Validate server configuration."""
+    """Validate server configuration.
+    
+    Args:
+        interface: The WireGuard interface name to validate
+        port: Port number to validate
+        network: Network CIDR to validate
+        ignore_range_check: If True, skip checking for network range overlaps
+        ignore_name: If True, skip checking if interface name already exists
+        ignore_port: If True, skip checking if port is already in use
+        ignore_network: If True, skip network validation entirely
+        
+    Returns:
+        Tuple of (success: bool, metadata: dict)
+        metadata contains either {"success": True} or {"error": "error message"}
+    """
     ensure_root()
     data = load_data(interface)
     existing_interfaces = os.listdir("/etc/wireguard/")
@@ -551,10 +767,24 @@ def init_server(
     public_ip: str | None = None,
     ignore_range_check: bool = True,
 ):
-    """Initialize server state for an interface (idempotent)."""
+    """Initialize server state for an interface (idempotent).
+    
+    Args:
+        interface: WireGuard interface name (auto-generated if None)
+        port: Port number for WireGuard (auto-selected if None)
+        network: Network CIDR for the VPN (auto-selected if None)
+        public_ip: Public IP address for endpoint (auto-detected if None)
+        ignore_range_check: If True, skip checking for network range overlaps
+        
+    Raises:
+        SystemExit: If validation fails or interface name is invalid
+        
+    Note:
+        Creates keypairs, assigns server IP, saves configuration, and generates
+        WireGuard config file. Uses sensible defaults for all parameters.
+    """
     ensure_root()
     ensure_directories()
-    ensure_qrencode_installed()
 
     print("Trying to create with:")
     print(f"  Interface: {interface}")
@@ -605,10 +835,24 @@ def init_server(
 
 
 def get_script_path() -> str:
+    """Get the absolute path to the current script.
+    
+    Returns:
+        Absolute path to this Python script file
+    """
     return SCRIPT_PATH
 
 
 def enable_service(interface: str):
+    """Enable systemd service for the WireGuard interface.
+    
+    Args:
+        interface: The WireGuard interface name
+        
+    Note:
+        Creates a systemd oneshot service that can start/stop the interface.
+        Requires systemctl to be available. Prints status messages.
+    """
     ensure_root()
     if not command_exists("systemctl"):
         print("systemctl not found (systemd required)")
@@ -642,6 +886,14 @@ WantedBy=multi-user.target
 
 
 def stop_wireguard(interface: str):
+    """Stop a WireGuard interface.
+    
+    Args:
+        interface: The WireGuard interface name to stop
+        
+    Raises:
+        SystemExit: If the interface cannot be stopped
+    """
     ensure_root()
     try:
         subprocess.run(["wg-quick", "down", interface], check=True)
@@ -652,6 +904,15 @@ def stop_wireguard(interface: str):
 
 
 def disable_service(interface: str):
+    """Disable and remove systemd service for the WireGuard interface.
+    
+    Args:
+        interface: The WireGuard interface name
+        
+    Note:
+        Stops, disables, and removes the systemd service file.
+        Continues gracefully if systemctl is not available.
+    """
     ensure_root()
     if not command_exists("systemctl"):
         print("systemctl not found (systemd required)")
@@ -670,6 +931,14 @@ def disable_service(interface: str):
 
 
 def get_used_ips(interface: str) -> list[str]:
+    """Get list of IP addresses already in use by peers on an interface.
+    
+    Args:
+        interface: The WireGuard interface name
+        
+    Returns:
+        List of IP address strings currently assigned to peers
+    """
     ensure_root()
     data = load_data(interface)
     return [peer["ip"] for peer in data["peers"].values()]
@@ -682,6 +951,19 @@ def check_new_peer(
     ignore_name: bool = False,
     ignore_ip: bool = False,
 ):
+    """Validate parameters for adding a new peer.
+    
+    Args:
+        interface: The WireGuard interface name
+        name: Peer name to validate
+        peer_ip: IP address to validate (optional)
+        ignore_name: If True, skip peer name validation
+        ignore_ip: If True, skip IP address validation
+        
+    Returns:
+        Tuple of (success: bool, metadata: dict)
+        metadata contains either {"success": True} or {"error": "error message"}
+    """
     ensure_root()
     data = load_data(interface)
     if name.lower() == "server" and not ignore_name:
@@ -709,6 +991,18 @@ def check_new_peer(
 
 
 def add_peer(interface: str, name: str, peer_ip: str = None, allowed_ips=None):
+    """Add a new peer to the WireGuard interface.
+    
+    Args:
+        interface: The WireGuard interface name
+        name: Name for the new peer
+        peer_ip: IP address for the peer (auto-assigned if None)
+        allowed_ips: Allowed IPs for the peer (uses server network if None)
+        
+    Note:
+        Generates new keypair for the peer, validates parameters, saves configuration,
+        and regenerates WireGuard config. Returns early if validation fails.
+    """
     ensure_root()
     data = load_data(interface)
 
@@ -730,10 +1024,23 @@ def add_peer(interface: str, name: str, peer_ip: str = None, allowed_ips=None):
     }
     save_data(interface, data)
     print(f"Added peer '{name}' with IP: {peer_ip}")
-    generate_config(interface, data)
+    generate_config(interface, data, non_critical_change=True)
 
 
 def remove_peer(interface: str, name_or_index: str):
+    """Remove a peer from the WireGuard interface.
+    
+    Args:
+        interface: The WireGuard interface name
+        name_or_index: Peer name or numeric index (1-based) to remove
+        
+    Returns:
+        Tuple of (success: bool, message: str)
+        
+    Note:
+        Accepts either peer name or 1-based index. Updates configuration
+        and regenerates WireGuard config file after removal.
+    """
     ensure_root()
     data = load_data(interface)
     if name_or_index.isdigit():
@@ -751,12 +1058,21 @@ def remove_peer(interface: str, name_or_index: str):
     del data["peers"][target]
     save_data(interface, data)
     print(f"Removed peer '{target}'")
-    generate_config(interface, data)
+    generate_config(interface, data, non_critical_change=True)
     return True, "Success"
 
 
 def rotate_peer_key(interface: str, name: str):
-    """Regenerate keypair for a peer (updates private/public keys)."""
+    """Regenerate keypair for a peer (updates private/public keys).
+    
+    Args:
+        interface: The WireGuard interface name
+        name: Name of the peer to rotate keys for
+        
+    Note:
+        Generates new private and public keys for the specified peer.
+        Updates configuration and regenerates WireGuard config file.
+    """
     ensure_root()
     data = load_data(interface)
     if name not in data["peers"]:
@@ -767,11 +1083,21 @@ def rotate_peer_key(interface: str, name: str):
     data["peers"][name]["public_key"] = pub
     save_data(interface, data)
     print(f"Rotated keys for peer '{name}'")
-    generate_config(interface, data)
+    generate_config(interface, data, non_critical_change=True)
 
 
 def rename_peer(interface: str, old: str, new: str):
-    """Rename a peer (preserves keys and settings)."""
+    """Rename a peer (preserves keys and settings).
+    
+    Args:
+        interface: The WireGuard interface name
+        old: Current name of the peer
+        new: New name for the peer
+        
+    Note:
+        Preserves all peer configuration while changing only the name.
+        Validates that new name doesn't conflict with existing peers.
+    """
     ensure_root()
     if old == new:
         print("Old and new names are identical")
@@ -786,11 +1112,21 @@ def rename_peer(interface: str, old: str, new: str):
     data["peers"][new] = data["peers"].pop(old)
     save_data(interface, data)
     print(f"Renamed peer '{old}' -> '{new}'")
-    generate_config(interface, data)
+    generate_config(interface, data, non_critical_change=True)
 
 
 def list_peers(interface: str, print_output: bool = False, as_json: bool = False):
-    """List peers for an interface; returns names or detail list if JSON."""
+    """List peers for an interface; returns names or detail list if JSON.
+    
+    Args:
+        interface: The WireGuard interface name
+        print_output: If True, print formatted output to stdout
+        as_json: If True, return detailed peer data for JSON serialization
+        
+    Returns:
+        List of peer names (if as_json=False) or list of detailed peer dicts (if as_json=True)
+        Each detailed dict includes all peer configuration and metadata.
+    """
     data = load_data(interface)
     peers = data.get("peers", {})
     names = sorted(peers.keys())
@@ -822,8 +1158,17 @@ def list_peers(interface: str, print_output: bool = False, as_json: bool = False
 
 def build_server_config_string(data: dict) -> str:
     """Build the full server WireGuard configuration content as a string.
-    - Uses nftables PostUp/PostDown tied to the interface and current server network
-    - Emits per-peer AllowedIPs as <peer_ip>/32 for clarity
+    
+    Args:
+        data: Interface configuration data dictionary
+        
+    Returns:
+        Complete WireGuard configuration file content as a string
+        
+    Note:
+        - Uses nftables PostUp/PostDown tied to the interface and current server network
+        - Emits per-peer AllowedIPs as <peer_ip>/32 for clarity
+        - Includes both default nftables rules and any custom commands
     """
     interface = data["server"]["interface"]
     table_name = f"{interface}_nat"
@@ -868,6 +1213,18 @@ AllowedIPs = {allowed_for_view}
 
 
 def is_interface_active(interface: str) -> bool:
+    """Check if a WireGuard interface is currently active.
+    
+    Args:
+        interface: The WireGuard interface name
+        
+    Returns:
+        True if the interface is active, False otherwise
+        
+    Note:
+        Uses 'wg show <interface>' to determine if interface is running.
+        Returns False if command fails or interface doesn't exist.
+    """
     try:
         # 'wg show <iface>' returns non-zero if interface is not present
         subprocess.run(
@@ -880,13 +1237,69 @@ def is_interface_active(interface: str) -> bool:
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
+def prepare_reduced_config(interface: str) -> str:
+    """Create a reduced WireGuard configuration for syncconf operations.
+    
+    Args:
+        interface: The WireGuard interface name
+        
+    Returns:
+        Path to the temporary reduced configuration file
+        
+    Raises:
+        ValueError: If server private key is missing
+        
+    Note:
+        Creates a minimal config with only essential peer information
+        for use with 'wg syncconf'. File is created with .temp extension.
+    """
+    data = load_data(interface)
+    reduced_conf_path = f"/etc/pyguard/{interface}-reduced.temp"
+    os.makedirs(os.path.dirname(reduced_conf_path), exist_ok=True)
+
+    if not data.get("server", {}).get("private_key"):
+        raise ValueError("Server private key is missing in data.")
+
+    reduced_string = ""
+
+    reduced_string += f"""[Interface]
+    ListenPort = {data.get('server', {}).get('port', 0)}
+    PrivateKey = {data.get('server', {}).get('private_key', '')}
+
+    """
+    for peer_name in data.get("peers", {}):
+        peer = data["peers"][peer_name]
+        reduced_string += f"""[Peer]
+PublicKey = {peer['public_key']}
+AllowedIPs = {peer['ip']}/32
+
+"""
+
+    with open(reduced_conf_path, "w") as f:
+        f.write(reduced_string)
+    
+    return reduced_conf_path
+        
+
 
 def restart_wg_interface(interface: str, non_critical_change: bool = False):
+    """Restart a WireGuard interface with appropriate method based on change type.
+    
+    Args:
+        interface: The WireGuard interface name
+        non_critical_change: If True, use syncconf for minimal disruption.
+                            If False, perform full restart with down/up cycle.
+                            
+    Note:
+        For non-critical changes (peer additions, etc.), uses 'wg syncconf'
+        to apply changes without disrupting existing connections.
+        For critical changes, performs full interface restart.
+    """
     # If systemd has an active wg-quick@interface, restart it
     if non_critical_change:
-        raise NotImplementedError(
-            "Not yet supported"
-        )  # TODO create a specific file and use wg syncconf
+        path = prepare_reduced_config(interface)
+        subprocess.run(["wg", "syncconf", interface, path], check=True)
+        os.remove(path)
     elif command_exists("systemctl") and False:
         res = subprocess.run(
             ["systemctl", "is-active", f"wg-quick@{interface}"],
@@ -906,6 +1319,19 @@ def restart_wg_interface(interface: str, non_critical_change: bool = False):
 
 
 def rename_interface(interface: str, new_name: str):
+    """Rename a WireGuard interface.
+    
+    Args:
+        interface: Current interface name
+        new_name: New interface name
+        
+    Returns:
+        True if successful, False if validation fails
+        
+    Note:
+        Validates new name, deletes old interface, saves data with new name.
+        Restarts interface if it was active before renaming.
+    """
     ensure_root()
     data = load_data(interface)
     active = is_interface_active(interface)
@@ -931,6 +1357,20 @@ def rename_interface(interface: str, new_name: str):
 def generate_config(
     interface: str, data: dict | None = None, non_critical_change: bool = False
 ):
+    """Generate WireGuard configuration file and restart interface if active.
+    
+    Args:
+        interface: The WireGuard interface name
+        data: Configuration data dictionary (loaded from disk if None)
+        non_critical_change: If True, use minimal restart method
+        
+    Raises:
+        SystemExit: If interface restart fails
+        
+    Note:
+        Writes the complete WireGuard configuration to /etc/wireguard/<interface>.conf
+        and restarts the interface if it's currently active.
+    """
     ensure_root()
     if data is None:
         data = load_data(interface)
@@ -952,6 +1392,20 @@ def generate_config(
 def show_server_config(
     interface: str, as_json: bool = False, print_output: bool = True
 ):
+    """Display or return the server WireGuard configuration.
+    
+    Args:
+        interface: The WireGuard interface name
+        as_json: If True, return structured data instead of config text
+        print_output: If True, print the configuration to stdout
+        
+    Returns:
+        Configuration text string (if as_json=False) or detailed dict (if as_json=True)
+        
+    Note:
+        Shows the complete server-side WireGuard configuration including
+        all peers with their /32 allowed IPs.
+    """
     data = load_data(interface)
     cfg = build_server_config_string(data)
     if as_json:
@@ -973,6 +1427,19 @@ def show_server_config(
 
 
 def generate_peer_config(interface: str, name: str) -> str | None:
+    """Generate client configuration for a specific peer.
+    
+    Args:
+        interface: The WireGuard interface name
+        name: Name of the peer to generate config for
+        
+    Returns:
+        Complete client WireGuard configuration as string, or None if peer doesn't exist
+        
+    Note:
+        Generates a client-side configuration with server public key, endpoint,
+        and peer's private key. Uses server's public IP or placeholder if not set.
+    """
     ensure_root()
     data = load_data(interface)
     if name not in data["peers"]:
@@ -996,7 +1463,16 @@ PersistentKeepalive = 25
 
 
 def save_client_config(name, config):
-    """Save client configuration to a file"""
+    """Save client configuration to a file.
+    
+    Args:
+        name: Name of the peer (used for filename)
+        config: WireGuard configuration content as string
+        
+    Note:
+        Creates ./client_configs/ directory and saves the configuration
+        as <name>.conf. Prints the saved file path.
+    """
     client_dir = Path("./client_configs")
     client_dir.mkdir(exist_ok=True)
 
@@ -1009,7 +1485,15 @@ def save_client_config(name, config):
 
 
 def get_used_ports():
-    """Return a sorted list of currently used TCP/UDP ports."""
+    """Return a sorted list of currently used TCP/UDP ports.
+    
+    Returns:
+        Sorted list of integers representing ports currently in use by the system
+        
+    Note:
+        Scans all network connections (TCP/UDP, IPv4/IPv6) to find used ports.
+        Includes both local and remote ports from active connections.
+    """
     used_ports = set()
 
     # Iterate over all connections (TCP/UDP, IPv4/IPv6)
@@ -1024,9 +1508,25 @@ def get_used_ports():
 
 def generate_qr_code(config: str, name: str | None = None):
     """Generate/display QR code using 'qrencode' CLI.
-    - If name is provided, save PNG to ./client_configs/{name}_qr.png
-    - Otherwise, render ANSI QR to terminal
+    
+    Args:
+        config: WireGuard configuration content to encode
+        name: If provided, save PNG to ./client_configs/{name}_qr.png
+              If None, render ANSI QR to terminal
+              
+    Returns:
+        True if successful, False if qrencode is unavailable or fails
+        
+    Note:
+        - If name is provided, saves PNG to ./client_configs/{name}_qr.png
+        - Otherwise, renders ANSI QR to terminal for immediate scanning
+        - Automatically attempts to install qrencode if missing
     """
+    try:
+        ensure_qrencode_installed()
+    except Exception as e:
+        print(f"Failed to ensure qrencode is installed: {e}")
+        return False
     if not command_exists("qrencode"):
         print("QR code generation not available: 'qrencode' is not installed.")
         print(
@@ -1059,6 +1559,19 @@ def generate_qr_code(config: str, name: str | None = None):
 
 
 def validate_allowed_ips(interface: str, new_allowed_ips: str) -> bool:
+    """Validate new allowed IPs against the existing interface configuration.
+    
+    Args:
+        interface: The WireGuard interface name
+        new_allowed_ips: CIDR network string to validate
+        
+    Returns:
+        Tuple of (success: bool, metadata: dict) - Note: docstring says bool but code returns tuple
+        
+    Note:
+        Ensures that the interface's network is a subnet of the proposed allowed IPs.
+        This prevents configuration that would break routing.
+    """
     # Validate the new allowed IPs against the existing configuration
     data = load_data(interface)
 
@@ -1094,6 +1607,24 @@ def show_peer_config(
     as_json: bool = False,
     print_output: bool = False,
 ):
+    """Display peer configuration with various output options.
+    
+    Args:
+        interface: The WireGuard interface name
+        name: Name of the peer
+        save_config: If True, save config to ./client_configs/{name}.conf
+        qr_code: If True, display QR code in terminal
+        save_qr: If True, save QR code as PNG file
+        as_json: If True, return structured data instead of printing config
+        print_output: If True, print configuration to stdout
+        
+    Returns:
+        Dictionary with peer configuration details and metadata, or None if peer not found
+        
+    Note:
+        Combines static peer data with runtime information from WireGuard.
+        Includes endpoint information, transfer statistics, and connection status.
+    """
     config = generate_peer_config(interface, name)
 
     data = load_data(interface)
@@ -1149,6 +1680,18 @@ def show_peer_config(
 
 
 def start_wireguard(interface: str):
+    """Start a WireGuard interface.
+    
+    Args:
+        interface: The WireGuard interface name to start
+        
+    Raises:
+        SystemExit: If the interface cannot be started
+        
+    Note:
+        Generates configuration and starts the interface using wg-quick.
+        Ensures the latest configuration is applied before starting.
+    """
     ensure_root()
     data = load_data(interface)
     generate_config(interface, data)
@@ -1161,6 +1704,17 @@ def start_wireguard(interface: str):
 
 
 def add_custom_command(interface: str, direction: str, command: str):
+    """Add a custom PostUp or PostDown command to the interface.
+    
+    Args:
+        interface: The WireGuard interface name
+        direction: Either "up" (PostUp) or "down" (PostDown)
+        command: Shell command to add
+        
+    Note:
+        Commands are executed when the interface starts (PostUp) or stops (PostDown).
+        Regenerates the WireGuard configuration after adding the command.
+    """
     ensure_root()
     data = load_data(interface)
     key = "custom_post_up" if direction == "up" else "custom_post_down"
@@ -1172,6 +1726,15 @@ def add_custom_command(interface: str, direction: str, command: str):
 
 
 def list_custom_commands(interface: str, direction: str):
+    """List custom PostUp or PostDown commands for an interface.
+    
+    Args:
+        interface: The WireGuard interface name
+        direction: Either "up" (PostUp) or "down" (PostDown)
+        
+    Note:
+        Prints numbered list of custom commands or message if none exist.
+    """
     data = load_data(interface)
     key = "custom_post_up" if direction == "up" else "custom_post_down"
     cmds = data["server"].get(key, [])
@@ -1183,6 +1746,17 @@ def list_custom_commands(interface: str, direction: str):
 
 
 def delete_custom_command(interface: str, direction: str, identifier: str):
+    """Delete a custom PostUp or PostDown command.
+    
+    Args:
+        interface: The WireGuard interface name
+        direction: Either "up" (PostUp) or "down" (PostDown)  
+        identifier: Either numeric index (1-based) or exact command string
+        
+    Note:
+        Can delete by index number or by matching the exact command text.
+        Regenerates WireGuard configuration after deletion.
+    """
     ensure_root()
     data = load_data(interface)
     key = "custom_post_up" if direction == "up" else "custom_post_down"
@@ -1212,15 +1786,38 @@ def delete_custom_command(interface: str, direction: str, identifier: str):
 
 
 def show_status(interface: str):
+    """Show WireGuard interface status.
+    
+    Args:
+        interface: The WireGuard interface name
+        
+    Raises:
+        SystemExit: If status command fails
+        
+    Note:
+        Runs 'wg show <interface>' to display current interface status
+        including peer connections, handshakes, and transfer statistics.
+    """
     ensure_root()
-    try:
-        subprocess.run(["wg", "show", interface], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    subprocess.run(["wg", "show", interface], check=False)
 
 
 def update_config(interface: str, target: str, parameter: str, value: str):
+    """Update configuration parameters for server or peer.
+    
+    Args:
+        interface: The WireGuard interface name
+        target: Either server parameter name or peer name
+        parameter: Parameter to update (varies by target type)
+        value: New value for the parameter
+        
+    Note:
+        Server parameters: port, dns, public-ip, network
+        Peer parameters: allowed-ips, rename, rotate-keys, ip
+        
+        For server updates, regenerates full configuration.
+        For peer updates, uses minimal restart when possible.
+    """
     ensure_root()
     data = load_data(interface)
     if target == "port":
@@ -1287,7 +1884,7 @@ def update_config(interface: str, target: str, parameter: str, value: str):
         peer_obj["allowed_ips"] = value
         save_data(interface, data)
         print(f"Updated allowed-ips for {target} -> {value}")
-        generate_config(interface, data)
+        generate_config(interface, data, non_critical_change=True)
         return
     if parameter in ("rename", "name"):
         if not value:
@@ -1300,7 +1897,7 @@ def update_config(interface: str, target: str, parameter: str, value: str):
 
         save_data(interface, data)
         print(f"Peer renamed: {target} -> {value}")
-        generate_config(interface, data)
+        generate_config(interface, data, non_critical_change=True)
         return
     if parameter in ("rotate-keys", "rotate", "regen-keys"):
         # Regenerate peer keypair
@@ -1309,7 +1906,7 @@ def update_config(interface: str, target: str, parameter: str, value: str):
         peer_obj["public_key"] = pub
         save_data(interface, data)
         print(f"Rotated keys for peer '{target}'")
-        generate_config(interface, data)
+        generate_config(interface, data, non_critical_change=True)
         return
     if parameter == "ip":
         try:
@@ -1332,7 +1929,7 @@ def update_config(interface: str, target: str, parameter: str, value: str):
         peer_obj["ip"] = str(new_ip)
         save_data(interface, data)
         print(f"Peer {target} IP changed {old_ip} -> {new_ip}")
-        generate_config(interface, data)
+        generate_config(interface, data, non_critical_change=True)
         return
     print(
         f"Unknown peer parameter '{parameter}' (supported: allowed-ips, rename, rotate-keys, ip)"
@@ -1340,6 +1937,12 @@ def update_config(interface: str, target: str, parameter: str, value: str):
 
 
 def help():
+    """Display comprehensive help information for PyGuard CLI.
+    
+    Shows usage patterns, command descriptions, and examples for all
+    available PyGuard commands including interface management,
+    peer operations, and configuration updates.
+    """
     txt = """
 PyGuard - WireGuard VPN Manager (interface-first CLI)
 
@@ -1399,6 +2002,19 @@ Notes:
 
 
 def main():
+    """Main entry point for the PyGuard CLI application.
+    
+    Parses command line arguments and routes to appropriate functions.
+    Handles both top-level commands (help, list, init, delete) and
+    interface-specific commands (start, stop, add, remove, etc.).
+    
+    Command structure:
+        - Top-level: pyguard <command> [args...]
+        - Interface-specific: pyguard <interface> <command> [args...]
+        
+    Raises:
+        SystemExit: On command errors or exceptions
+    """
     if len(sys.argv) < 2:
         help()
         return

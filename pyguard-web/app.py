@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import httpx
@@ -115,7 +115,45 @@ async def dashboard(request: Request):
         {
             "request": request,
             "interfaces": interfaces,
-            "api_base": API_BASE,
-            "access_token": token,
         },
     )
+
+# --------------------
+# Backend proxy layer
+# --------------------
+
+def _auth_headers(request: Request) -> dict[str, str]:
+    token = request.session.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"Authorization": f"Bearer {token}"}
+
+async def _proxy(method: str, path: str, request: Request):
+    # Disallow direct login/refresh via proxy (handled locally)
+    if path.strip("/") in ("login", "refresh"):
+        raise HTTPException(status_code=400, detail="Use web login")
+    url = f"{API_BASE}/{path}".rstrip("/")
+    headers = _auth_headers(request)
+    # Forward JSON/body/query params
+    data = await request.body()
+    params = dict(request.query_params)
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.request(
+                method,
+                url,
+                headers=headers,
+                params=params or None,
+                content=data if data else None,
+            )
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=502, detail=f"Upstream error: {e}")
+    # Pass through JSON / text / binary
+    content_type = resp.headers.get("content-type", "application/octet-stream")
+    if content_type.startswith("application/json"):
+        return JSONResponse(status_code=resp.status_code, content=resp.json())
+    return Response(content=resp.content, media_type=content_type, status_code=resp.status_code)
+
+@app.api_route("/proxy/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def proxy_any(full_path: str, request: Request):
+    return await _proxy(request.method, full_path, request)
