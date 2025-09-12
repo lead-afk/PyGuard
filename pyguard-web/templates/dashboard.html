@@ -18,7 +18,6 @@
         max-width: 1750px;
         margin: 14px auto 0;
         border-radius: 18px;
-        background: #101922;
         padding: 10px 30px;
         display: flex;
         align-items: center;
@@ -259,17 +258,27 @@
         pointer-events: none;
         max-height: 100%;
         overflow: auto;
-        /* collapsed state */
-        flex-basis: 0px;
-        max-width: 0px;
-        width: 0px;
-        flex-shrink: 1;
-        /* animate reveal/collapse smoothly */
-        transition: flex-basis 0.35s ease, max-width 0.35s ease,
-          width 0.35s ease, opacity 0.3s ease, transform 0.35s ease;
+        /* fully hidden by default so it does not reserve layout space */
+        display: none;
+        flex: 0 0 auto;
+        width: 0;
+        max-width: 0;
+        flex-basis: 0;
+        /* animate only when shown */
+        transition: opacity 0.3s ease, transform 0.35s ease;
       }
-        /* Fully hide peer detail panel when not in use so it doesn't reserve gap space */
-        .peer-detail-panel.hidden { display: none !important; }
+      /* When region has peer-open, we show and size the panel */
+      .details-region.peer-open .peer-detail-panel {
+        display: flex;
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: auto;
+        flex-basis: 500px;
+        max-width: 500px;
+        width: 500px;
+      }
+      /* Explicit hidden helper (legacy calls) */
+      .peer-detail-panel.hidden { display:none !important; }
       /* Compact island tweaks: move interface actions above stats and ensure layout fits tighter */
       .island.expanded:not(.peer-open) .iface-meta-card {
         position: relative;
@@ -973,8 +982,21 @@
       const peerLoading = document.getElementById("peerLoading");
       const emptyState = document.getElementById("emptyState");
       const peerDetailPanel = document.getElementById("peerDetailPanel");
-  function hidePeerDetailPanel() { if (peerDetailPanel && !peerDetailPanel.classList.contains('hidden')) { peerDetailPanel.classList.add('hidden'); } }
-  function showPeerDetailPanel() { if (peerDetailPanel) { peerDetailPanel.classList.remove('hidden'); } }
+      // Updated hide/show helpers: rely on .details-region.peer-open to control sizing so when hidden it occupies zero space.
+      function hidePeerDetailPanel() {
+        if (!peerDetailPanel) return;
+        peerDetailPanel.classList.add('hidden');
+        const region = islandEl.querySelector('.details-region');
+        if (region) region.classList.remove('peer-open');
+        islandEl.classList.remove('peer-open');
+      }
+      function showPeerDetailPanel() {
+        if (!peerDetailPanel) return;
+        peerDetailPanel.classList.remove('hidden');
+        const region = islandEl.querySelector('.details-region');
+        if (region) region.classList.add('peer-open');
+        islandEl.classList.add('peer-open');
+      }
       const editInterfaceModalMount =
         document.getElementById("editInterfaceModal");
       const btnServerSettings = document.getElementById("btnServerSettings");
@@ -1950,7 +1972,7 @@
           ipPrefill || ""
         }" placeholder="Auto if blank"/>\n      </div>\n      <div class="pm-field">\n        <label for="pmAllowed">Allowed IPs</label>\n        <input id="pmAllowed" name="allowed_ips" value="${allowedPrefill}" placeholder="e.g. ${
           allowedPrefill || "0.0.0.0/0"
-        }"/>\n      </div>\n      <div id="pmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="pmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="pmValidate" class="btn-glow">Validate</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+  }"/>\n      </div>\n      <div id="pmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="pmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="pmValidate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`;
       }
       async function ensureServerNetwork() {
         // If we didn't capture the network during interface load, fetch it now.
@@ -2140,7 +2162,7 @@
         const chkDis = loading ? "disabled" : "";
         return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="eimClose" aria-label="Close">×</button>\n    <h3>Edit Interface</h3>\n    <form id="eimForm" data-loading="${
           loading ? 1 : 0
-        }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="eimName">Name</label>\n        <input ${dis} class="${cls.trim()}" id="eimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimPort">Port</label>\n        <input ${dis} class="${cls.trim()}" id="eimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimNetwork">Network</label>\n        <input ${dis} class="${cls.trim()}" id="eimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimPublicIP">Public IP</label>\n        <input ${dis} class="${cls.trim()}" id="eimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimDNS">DNS</label>\n        <input ${dis} class="${cls.trim()}" id="eimDNS" name="dns" value="${dns}" placeholder="e.g. 1.1.1.1"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="eimIgnore" ${chkDis} checked />\n        <label for="eimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="eimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word;"></div>\n      <div class="pm-actions">\n        <button type="button" id="eimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="eimValidate" class="btn-glow">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+        }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="eimName">Name</label>\n        <input ${dis} class="${cls.trim()}" id="eimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimPort">Port</label>\n        <input ${dis} class="${cls.trim()}" id="eimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimNetwork">Network</label>\n        <input ${dis} class="${cls.trim()}" id="eimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimPublicIP">Public IP</label>\n        <input ${dis} class="${cls.trim()}" id="eimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimDNS">DNS</label>\n        <input ${dis} class="${cls.trim()}" id="eimDNS" name="dns" value="${dns}" placeholder="e.g. 1.1.1.1"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="eimIgnore" ${chkDis} checked />\n        <label for="eimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="eimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word;"></div>\n      <div class="pm-actions">\n        <button type="button" id="eimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="eimValidate" class="btn-glow" style="min-width:150px;">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`;
       }
       async function openEditInterfaceModal() {
         if (!currentInterface) {
@@ -2368,12 +2390,32 @@
               islandEl.querySelector(".details-region")?.classList.remove("peer-open");
               hidePeerDetailPanel();
               emptyState.style.display = "block";
-              // Done
-              close();
-              showToast("Server updated");
-              // Success modal for edit
-              const finalPort = currentServer?.port || s.port || updPayload?.port;
-              showInterfaceSuccess("edited", currentInterface, finalPort);
+              // Determine if backend reports an actual change
+              const changed = !!updPayload?.something_changed;
+              const applyBtn = form.querySelector('#eimValidate');
+              if (changed) {
+                // Close modal then show success + guidance
+                close();
+                showToast('Server updated');
+                const finalPort = currentServer?.port || s.port || updPayload?.port;
+                showInterfaceSuccess('edited', currentInterface, finalPort);
+              } else {
+                // Keep modal open; inform user nothing changed and reflect via button label
+                showToast('No changes detected');
+                feedback.style.color = '#a0b4c0';
+                feedback.textContent = 'No changes to apply.';
+                if (applyBtn) {
+                  const originalText = applyBtn.textContent;
+                  applyBtn.textContent = 'Nothing changed';
+                  applyBtn.disabled = true;
+                  // Revert after short delay so user can attempt edits
+                  setTimeout(() => {
+                    if (!document.body.contains(applyBtn)) return;
+                    applyBtn.textContent = originalText;
+                    applyBtn.disabled = false;
+                  }, 2000);
+                }
+              }
             } catch (err) {
               feedback.style.color = "#ff6b6b";
               feedback.textContent = `Update failed: ${err?.message || "error"}`;
@@ -2977,7 +3019,7 @@
   const id1 = `pgc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
   const id2 = `pgc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
   const id3 = `pgc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`; // sysctl block
-  return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" style="max-width:640px;" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="ismClose" aria-label="Close">×</button>\n    <h3 style="margin-top:0;">${heading}</h3>\n    <div style="font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready. To ensure full connectivity and proper WireGuard operation, review the recommended system steps below.</div>\n      <ol style="margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;">\n        <li>Allow WireGuard traffic — port <b>${p}</b> must be open and publicly reachable end-to-end (host firewall, upstream router/NAT, cloud security group):<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id1}">Copy</button><code id="${id1}">${fwCmd1}</code></div>For peer-to-peer routing between clients:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id2}">Copy</button><code id="${id2}">${fwCmd2}</code></div><div style="margin-top:6px;font-size:11px;color:#90a4ae;">These commands plus external firewall/NAT rules ensure peers can reach the interface.</div></li>\n        <li>Enable packet forwarding system-wide:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id3}">Copy</button><code id="${id3}">sysctl -w net.ipv4.ip_forward=1\n# (optional IPv6)\nsysctl -w net.ipv6.conf.all.forwarding=1</code></div><span style="display:block;margin-top:4px;">Persist in /etc/sysctl.conf for reboot survival.</span></li>\n      </ol>\n    </div>\n    <div class="pm-actions" style="margin-top:18px;justify-content:flex-end;gap:10px;">\n      <button type="button" id="ismApplyRules" class="btn-glow pg-fixed-btn" style="background:#1f3a4d;">Apply Rules</button>\n      <button type="button" id="ismUnderstand" class="btn-glow">I Understand</button>\n    </div>\n  </div>\n</div>`;
+  return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" style="max-width:640px;" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="ismClose" aria-label="Close">×</button>\n    <h3 style="margin-top:0;">${heading}</h3>\n    <div style="font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready. To ensure full connectivity and proper WireGuard operation, review the recommended system steps below.</div>\n      <ol style="margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;">\n        <li>To allow for WireGuard traffic port <b>${p}</b> must be open and publicly reachable end-to-end (host firewall, upstream router/NAT, cloud security group):<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id1}">Copy</button><code id="${id1}">${fwCmd1}</code></div>For peer-to-peer routing between clients:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id2}">Copy</button><code id="${id2}">${fwCmd2}</code></div><div style="margin-top:6px;font-size:11px;color:#90a4ae;">These commands plus external firewall/NAT rules ensure peers can reach the interface.</div></li>\n        <li>Enable packet forwarding system-wide:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id3}">Copy</button><code id="${id3}">sysctl -w net.ipv4.ip_forward=1\n# (optional IPv6)\nsysctl -w net.ipv6.conf.all.forwarding=1</code></div><span style="display:block;margin-top:4px;">Persist in /etc/sysctl.conf for reboot survival.</span></li>\n      </ol>\n    </div>\n    <div class="pm-actions" style="margin-top:18px;justify-content:flex-end;gap:10px;">\n      <button type="button" id="ismApplyRules" class="btn-glow pg-fixed-btn" style="background:#1f3a4d;">Apply Rules</button>\n      <button type="button" id="ismUnderstand" class="btn-glow">I Understand</button>\n    </div>\n  </div>\n</div>`;
       }
       function showInterfaceSuccess(kind, iface, port) {
         if (!interfaceSuccessMount) return;

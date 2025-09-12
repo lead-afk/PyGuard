@@ -6,7 +6,7 @@ import httpx
 import logging
 import os
 
-API_BASE = os.environ.get("PYGUARD_API_BASE", "http://10.0.0.1:6655")
+API_BASE = os.environ.get("PYGUARD_API_BASE", "http://127.0.0.1:6655")
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("pyguard-web")
