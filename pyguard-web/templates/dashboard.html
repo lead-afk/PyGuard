@@ -3,8 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <title>PyGuard Dashboard</title>
-    <meta name="api-base" content="{{ api_base }}" />
-    <meta name="access-token" content="{{ access_token }}" />
     <link rel="stylesheet" href="/static/style.css" />
     <style>
       body,
@@ -14,6 +12,7 @@
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
+        overflow: hidden;
       }
       .top-bar {
         max-width: 1750px;
@@ -37,6 +36,9 @@
         max-width: 1750px;
         margin: 22px auto 40px;
         padding: 0 18px;
+        display: flex;
+        justify-content: center;
+        min-height: 300px;
       }
       .island {
         position: relative;
@@ -44,18 +46,21 @@
         border: 1px solid #1e2a36;
         border-radius: 26px;
         padding: 34px 46px 46px;
-        min-height: 560px;
+        min-height: 200px;
+        max-width: 600px;
+        width: 100%;
         display: flex;
         flex-direction: column;
         gap: 28px;
         box-shadow: 0 10px 40px -12px rgba(0, 0, 0, 0.65),
           0 0 0 1px #182430 inset;
-        transition: all 0.5s cubic-bezier(0.4, 0.18, 0.21, 1);
+        transition: all 0.4s ease-out;
         overflow: hidden;
+        max-height: 720px;
       }
       #island {
         /* opacity: 0.97; */
-        background-color: #182430f8;
+        background-color: #182430e3;
         /* backdrop-filter: blur(6px); */
       }
       .island.expanded {
@@ -63,11 +68,23 @@
         flex-direction: row;
         align-items: flex-start;
         gap: 34px;
+        /* Compact by default (no peer selected) */
+        max-width: 1160px;
+        min-height: 420px;
+        width: 100%;
+      }
+      /* When a peer is actually open, allow full expansion */
+      .island.expanded.peer-open {
+        max-width: 1750px;
+        min-height: 560px;
       }
       .interfaces-panel {
         width: 100%;
-        transition: all 0.5s cubic-bezier(0.4, 0.18, 0.21, 1);
+        transition: all 0.4s ease-out;
         position: relative;
+        max-height: 660px;
+        display: flex;
+        flex-direction: column;
       }
       .island.expanded .interfaces-panel {
         width: 270px;
@@ -86,10 +103,16 @@
         letter-spacing: 1px;
         color: #6fa8dc;
       }
+      /* Add spacing under the Add Interface button */
+      #btnOpenAddInterface {
+        margin-bottom: 14px;
+      }
       .iface-list {
         flex: 1;
         overflow-y: auto;
         padding-right: 4px;
+        max-height: 800px;
+        min-height: 120px;
       }
       .iface-item {
         cursor: pointer;
@@ -128,9 +151,13 @@
         margin-left: 0;
       }
       .details-region.peer-open .peer-detail-panel {
+        /* reveal smoothly */
         opacity: 1;
         transform: translateX(0);
         pointer-events: auto;
+        flex-basis: 500px;
+        max-width: 500px;
+        width: 500px;
       }
       .iface-meta-card {
         background: #101d27;
@@ -144,6 +171,7 @@
         position: relative;
         overflow: hidden;
         min-height: 100px;
+        transition: all 0.4s ease-out;
       }
       /* remove gray overlay for consistency with other sections */
       .iface-meta-card:before {
@@ -161,6 +189,8 @@
         flex-wrap: wrap;
         font-size: 13px;
         color: #a7bac6;
+        margin-top: 20px;
+        width: 780px;
       }
       .iface-stat {
         background: #182733;
@@ -196,36 +226,63 @@
         flex-direction: column;
         gap: 16px;
         position: relative;
+        transition: all 0.4s ease-out;
+        min-height: 0; /* allow internal scroll containers */
       }
       .peers-layout {
         display: flex;
         gap: 26px;
         align-items: flex-start;
+        min-height: 0; /* enable child scroll areas */
       }
       .peers-left {
         flex: 1;
         display: flex;
         flex-direction: column;
         gap: 16px;
+        min-height: 0; /* enable child scroll areas */
+        /* smooth width change when peer panel opens */
+        transition: flex-basis 0.35s ease, width 0.35s ease;
       }
       .peer-detail-panel {
-        width: 500px;
-        flex-shrink: 0;
         background: #15222c;
         border: 1px solid #20313f;
         border-radius: 18px;
         padding: 20px 24px 26px;
-        display: flex;
-        flex-direction: column;
+        display: flex; /* keep in flow, but collapsed by default */
         gap: 16px;
         box-shadow: 0 0 0 1px #1f2c38 inset, 0 8px 26px -12px #000;
         position: relative;
         opacity: 0;
-        transform: translateX(40px);
-        transition: all 0.35s ease;
+        transform: translateX(20px);
         pointer-events: none;
         max-height: 100%;
         overflow: auto;
+        /* collapsed state */
+        flex-basis: 0px;
+        max-width: 0px;
+        width: 0px;
+        flex-shrink: 1;
+        /* animate reveal/collapse smoothly */
+        transition: flex-basis 0.35s ease, max-width 0.35s ease,
+          width 0.35s ease, opacity 0.3s ease, transform 0.35s ease;
+      }
+        /* Fully hide peer detail panel when not in use so it doesn't reserve gap space */
+        .peer-detail-panel.hidden { display: none !important; }
+      /* Compact island tweaks: move interface actions above stats and ensure layout fits tighter */
+      .island.expanded:not(.peer-open) .iface-meta-card {
+        position: relative;
+        padding-right: 220px; /* space for actions block */
+      }
+      .island.expanded:not(.peer-open) .iface-actions {
+        position: absolute;
+        top: 16px;
+        right: 18px;
+        z-index: 1;
+      }
+      .island.expanded:not(.peer-open) .iface-stats {
+        margin-top: 20px;
+        width: 780px;
       }
       .peer-detail-header {
         display: flex;
@@ -241,6 +298,8 @@
         flex-direction: column;
         gap: 10px;
         font-size: 12px;
+  /* Ensure consistent right spacing so inputs don't butt against the island edge */
+  padding-right: 12px; /* match dual-traffic grid gap */
       }
       .peer-field {
         display: flex;
@@ -265,6 +324,7 @@
         resize: vertical;
         font-family: monospace;
         letter-spacing: 0.4px;
+  box-sizing: border-box; /* keep consistent right margin within container */
       }
       /* Dual traffic fields (force grid to avoid overlap) */
       .peer-field.dual-traffic {
@@ -345,7 +405,14 @@
       .peers-section-header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        /* Use natural flow; right controls will push via auto margin */
+      }
+      .peers-section-header .peer-tools {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-right: 2px; /* subtle right breathing room */
       }
       .peers-section-header h3 {
         margin: 0;
@@ -364,6 +431,10 @@
         display: grid;
         gap: 12px;
         grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        min-width: 590px;
+        overflow-y: auto; /* scroll when many peers */
+        max-height: 420px;
+        padding-right: 6px; /* keep scrollbar off content */
       }
       .peer-row {
         padding: 12px 14px 14px;
@@ -433,6 +504,8 @@
         align-items: center;
         justify-content: center;
         z-index: 900;
+        min-height: 100vh;
+        overflow-y: auto;
       }
       .peer-modal {
         background: #0f181f;
@@ -445,11 +518,37 @@
         flex-direction: column;
         gap: 20px;
         box-shadow: 0 20px 60px -20px #000, 0 0 0 1px #18242e inset;
+        margin: auto;
+        max-height: 90vh;
+        overflow-y: auto;
       }
       .peer-modal h3 {
         margin: 0;
         font-size: 20px;
         letter-spacing: 0.5px;
+      }
+      /* Shimmer loading for inputs */
+      @keyframes shimmer {
+        0% {
+          background-position: 200% 0;
+        }
+        100% {
+          background-position: -200% 0;
+        }
+      }
+      .input-loading {
+        color: transparent !important;
+        background-image: linear-gradient(
+          90deg,
+          #132028 25%,
+          #1b2b36 50%,
+          #132028 75%
+        ) !important;
+        background-size: 200% 100% !important;
+        animation: shimmer 1.2s linear infinite;
+      }
+      .input-loading::placeholder {
+        color: transparent !important;
       }
       .pm-field {
         display: flex;
@@ -514,36 +613,111 @@
         background: #27455e;
         color: #fff;
       }
-      @media (max-width: 960px) {
-        @media (max-width: 1100px) {
-          .island.expanded {
-            flex-direction: column;
-          }
-          .island.expanded .interfaces-panel {
-            width: 100%;
-            border-right: none;
-            border-top: 1px solid #1f2c38;
-            border-radius: 0 0 26px 26px;
-            box-shadow: none;
-            padding: 20px 18px 26px;
-            margin-top: 12px;
-          }
-          .island.expanded .details-region {
-            margin-left: 0;
-          }
-          .peers-layout {
-            flex-direction: column;
-          }
-          .peer-detail-panel {
-            width: 100%;
-            transform: translateY(20px);
-            max-height: none;
-          }
+      @media (max-width: 1100px) {
+        .island-wrapper {
+          min-height: 200px;
+        }
+        .island.expanded {
+          flex-direction: column;
+        }
+        /* On small screens, compact and expanded peer-open share the same full-width behavior */
+        .island.expanded,
+        .island.expanded.peer-open {
+          max-width: 100%;
+          min-height: unset;
+        }
+        .island.expanded .interfaces-panel {
+          width: 100%;
+          border-right: none;
+          border-top: 1px solid #1f2c38;
+          border-radius: 0 0 26px 26px;
+          box-shadow: none;
+          padding: 20px 18px 26px;
+          margin-top: 12px;
+        }
+        .island.expanded .details-region {
+          margin-left: 0;
+        }
+        .peers-layout {
+          flex-direction: column;
+        }
+        .peer-detail-panel {
+          /* on small screens, slide down and occupy full width when open */
+          transform: translateY(20px);
+          max-height: none;
+        }
+        .details-region.peer-open .peer-detail-panel {
+          flex-basis: 100%;
+          max-width: 100%;
+          width: 100%;
+        }
+        /* Reset absolute actions on mobile to avoid overlap */
+        .island.expanded:not(.peer-open) .iface-meta-card {
+          padding-right: 22px;
+        }
+        .island.expanded:not(.peer-open) .iface-actions {
+          position: static;
+          margin-left: auto;
         }
         .peer-list {
           grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
         }
       }
+      /* Status bar (toast) */
+      .toast {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        min-width: -moz-available; /* Firefox available width */
+        /* optional fallbacks */
+        width: -webkit-fill-available;
+        max-width: 100%;
+        margin: 0 auto;
+        z-index: 1000;
+        text-align: center;
+        color: #e9f0f6;
+        border-top: 1px solid #1f2c38;
+        backdrop-filter: blur(4px);
+        border-radius: 10px 10px 0 0;
+        box-shadow: 0 -8px 26px -16px rgba(0, 0, 0, 0.6);
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition: opacity 0.25s ease, transform 0.25s ease;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+      /* Settings modal styles */
+      .settings-modal { background:#0f181f; border:1px solid #22323f; border-radius:22px; width:720px; max-width:95%; display:flex; flex-direction:row; gap:0; min-height:420px; max-height:85vh; overflow:hidden; position:relative; box-shadow:0 18px 48px -20px #000, 0 0 0 1px #18242e inset; }
+      .settings-left { width:200px; background:#101d27; border-right:1px solid #1f2c38; display:flex; flex-direction:column; padding:24px 0 8px; gap:4px; }
+      .settings-left h4 { margin:0 18px 10px; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:#6fa8dc; }
+      .settings-nav { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+      .settings-nav li { cursor:pointer; padding:10px 18px; font-size:13px; color:#cfd8dc; border-left:3px solid transparent; transition:background .25s, border-color .25s; }
+      .settings-nav li:hover { background:#162633; }
+      .settings-nav li.active { background:#1d2c38; border-color:#335d7a; color:#fff; }
+      .settings-content { flex:1; display:flex; flex-direction:column; padding:30px 34px 34px; overflow-y:auto; gap:24px; }
+      .settings-content h3 { margin:0; font-size:20px; letter-spacing:.5px; }
+      .settings-close-btn { position:absolute; top:10px; right:10px; background:#1d2a34; border:1px solid #2a3a48; color:#9fb3bf; width:36px; height:36px; border-radius:10px; font-size:18px; font-weight:600; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .settings-close-btn:hover { background:#27455e; color:#fff; }
+      .settings-form { display:flex; flex-direction:column; gap:18px; max-width:420px; }
+      .settings-field { display:flex; flex-direction:column; gap:6px; }
+      .settings-field label { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#6fa8dc; }
+      .settings-field input { background:#132028; border:1px solid #243541; color:#d9e5ec; padding:12px 14px; border-radius:10px; font-size:14px; }
+      .settings-field input:focus { outline:2px solid #335d7a; outline-offset:1px; }
+      #cpFeedback { font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word; }
+      @media (max-width:760px){ .settings-modal{ flex-direction:column; width:100%; } .settings-left{ width:100%; flex-direction:row; overflow-x:auto; border-right:none; border-bottom:1px solid #1f2c38; padding:14px 10px; } .settings-nav{ flex-direction:row; } .settings-nav li{ border-left:none; border-bottom:3px solid transparent; } .settings-nav li.active{ border-bottom-color:#335d7a; } }
+  /* Copy button styling for interface success modal */
+  .pg-copy-wrap { position: relative; }
+  .pg-copy-btn { position:absolute; top:4px; right:6px; background:#1d2a34; border:1px solid #2a3a48; color:#cfd8dc; font-size:11px; padding:3px 8px 4px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; line-height:1; }
+  .pg-copy-btn:hover { background:#27455e; color:#fff; }
+  .pg-copy-btn.copied { background:#113820; border-color:#1e6b39; color:#9cf0b7; }
+  .pg-code-block { position:relative; margin:6px 0 4px; }
+  .pg-code-block code { display:block; padding:6px 8px; background:#132028; border:1px solid #22323f; border-radius:6px; font-size:12px; white-space:pre; overflow-x:auto; }
+  .pg-fixed-btn { min-width:120px; }
     </style>
   </head>
   <body>
@@ -564,6 +738,7 @@
           id="current-interface-label"
           style="font-size: 12px; color: #90a4ae"
         ></span>
+        <button id="btnOpenSettings" class="cog-btn" title="Settings">Settings</button>
         <a class="logout" href="/logout">Logout</a>
       </div>
     </div>
@@ -660,7 +835,14 @@
                         >Loading...</span
                       >
                     </div>
-                    <div style="display: flex; align-items: center; gap: 10px">
+                    <div class="peer-tools">
+                      <span
+                        id="emptyState"
+                        class="empty-state"
+                        style="padding: 0 4px; font-size: 12px; color: #7f95a1"
+                      >
+                        Select peer to display details.
+                      </span>
                       <button
                         id="btnOpenAddPeer"
                         class="peer-add-btn btn-pop"
@@ -677,11 +859,8 @@
                     </div>
                   </div>
                   <div id="peersContainer" class="peer-list"></div>
-                  <div class="empty-state" id="emptyState">
-                    Select peer to display details.
-                  </div>
                 </div>
-                <div class="peer-detail-panel" id="peerDetailPanel">
+                <div class="peer-detail-panel hidden" id="peerDetailPanel">
                   <div class="peer-detail-header" style="gap: 10px">
                     <h3 id="peerDetailTitle" style="flex: 1">Peer</h3>
                     <span
@@ -729,8 +908,13 @@
                       <label>Public Key</label
                       ><input id="detailPublicKey" readonly />
                     </div>
-                    <div class="peer-field">
-                      <label>IP</label><input id="detailIP" readonly />
+                    <div class="peer-field dual-traffic">
+                      <div class="traffic-col">
+                        <label>IP</label><input id="detailIP" readonly />
+                      </div>
+                      <div class="traffic-col">
+                        <label>Endpoint</label><input id="detailEndpoint" readonly />
+                      </div>
                     </div>
                     <div class="peer-field dual-traffic">
                       <div class="traffic-col">
@@ -763,14 +947,17 @@
     <div id="addPeerModal" style="display: none"></div>
     <div id="qrPeerModal" style="display: none"></div>
     <div id="editPeerModal" style="display: none"></div>
+    <div id="editInterfaceModal" style="display: none"></div>
     <div id="deletePeerModal" style="display: none"></div>
+    <div id="deleteInterfaceModal" style="display: none"></div>
+    <div id="logoutModal" style="display: none"></div>
+  <div id="interfaceSuccessModal" style="display:none"></div>
+    <div id="settingsModal" style="display:none"></div>
     <script>
-      const apiBase = document.querySelector('meta[name="api-base"]').content;
-      const token = document.querySelector('meta[name="access-token"]').content;
-      console.log("[PyGuard] Dashboard script start. apiBase=", apiBase);
-      if (!token) console.warn("[PyGuard] Missing access token meta");
+      // Backend proxy: all API calls go through /proxy so we avoid exposing raw API & token
+      const apiBase = '/proxy';
+      console.log("[PyGuard] Dashboard script start (proxy mode). apiBase=", apiBase);
       const headers = () => ({
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       });
       const interfacesContainer = document.getElementById(
@@ -780,10 +967,16 @@
       const ifaceMeta = document.getElementById("ifaceStats");
       const ifaceActivePill = document.getElementById("ifaceActivePill");
       const islandEl = document.getElementById("island");
+      const logoTitle = document.querySelector(".top-bar .logo-title");
       const peersContainer = document.getElementById("peersContainer");
       const peerLoading = document.getElementById("peerLoading");
       const emptyState = document.getElementById("emptyState");
       const peerDetailPanel = document.getElementById("peerDetailPanel");
+  function hidePeerDetailPanel() { if (peerDetailPanel && !peerDetailPanel.classList.contains('hidden')) { peerDetailPanel.classList.add('hidden'); } }
+  function showPeerDetailPanel() { if (peerDetailPanel) { peerDetailPanel.classList.remove('hidden'); } }
+      const editInterfaceModalMount =
+        document.getElementById("editInterfaceModal");
+      const btnServerSettings = document.getElementById("btnServerSettings");
       const peerDetailTitle = document.getElementById("peerDetailTitle");
       const peerDetailStatusPill = document.getElementById(
         "peerDetailStatusPill"
@@ -793,11 +986,13 @@
       const btnQrPeer = document.getElementById("btnQrPeer");
       const detailPublicKey = document.getElementById("detailPublicKey");
       const detailIP = document.getElementById("detailIP");
+  const detailEndpoint = document.getElementById("detailEndpoint");
       const detailDownload = document.getElementById("detailDownload");
       const detailUpload = document.getElementById("detailUpload");
       const detailHandshake = document.getElementById("detailHandshake");
       const detailConfig = document.getElementById("detailConfig");
       let serverNetwork = "";
+      let currentServer = {};
       // Optional (editor not yet rendered in current template revision)
       const peerEditor = document.getElementById("peerEditor");
       const peerForm = document.getElementById("peerForm");
@@ -968,6 +1163,16 @@
       async function selectInterface(iface) {
         clearPeerDetailInterval();
         clearInterfaceRefreshInterval();
+        // Reset any previously selected peer to avoid stale highlight when switching back
+        currentPeerPublicKey = null;
+        currentPeerName = null;
+        lastPeerDetail = null;
+        // Hide detail status pill until a peer is opened again
+        if (peerDetailStatusPill) peerDetailStatusPill.style.display = "none";
+        // Proactively remove any lingering active class from existing rows
+        document
+          .querySelectorAll(".peer-row.active")
+          .forEach((r) => r.classList.remove("active"));
         currentInterface = iface;
         document
           .querySelectorAll(".iface-item")
@@ -977,6 +1182,11 @@
         ifaceTitle.textContent = iface;
         ifaceMeta.innerHTML = "";
         peersContainer.innerHTML = "";
+        // Reset to compact (no peer open) when switching/choosing interface
+        islandEl.classList.remove("peer-open");
+        islandEl
+          .querySelector(".details-region")
+          ?.classList.remove("peer-open");
         emptyState.style.display = "block";
         islandEl.classList.add("expanded");
         await loadInterfaceAll();
@@ -998,6 +1208,7 @@
           if (!data) return;
           const s = data.server || {};
           serverNetwork = s.network || "";
+          currentServer = s;
           const isActive = !!data.active;
           // Update active pill next to interface name
           if (ifaceActivePill) {
@@ -1071,6 +1282,9 @@
           el.className =
             "peer-row" +
             (p.public_key === currentPeerPublicKey ? " active" : "");
+          // Attach identifiers for precise selection
+          el.dataset.pubkey = p.public_key || p.name;
+          el.dataset.name = p.name;
           const pill = `<span class=\"status-pill small ${
             p.active ? "ok" : "bad"
           }\" title=\"${p.active ? "Online" : "Offline"}\">${
@@ -1087,25 +1301,49 @@
           peersContainer.appendChild(el);
         });
       }
+      function setPeerDetailLoading(loading) {
+        const fields = [
+          detailPublicKey,
+          detailIP,
+          detailEndpoint,
+          detailDownload,
+          detailUpload,
+          detailHandshake,
+          detailConfig,
+        ];
+        fields.forEach((el) => {
+          if (!el) return;
+          if (loading) {
+            el.setAttribute("disabled", "true");
+            el.setAttribute("aria-busy", "true");
+            el.classList.add("input-loading");
+          } else {
+            el.removeAttribute("disabled");
+            el.removeAttribute("aria-busy");
+            el.classList.remove("input-loading");
+          }
+        });
+      }
       async function openPeer(pub) {
         const p = peers.find((x) => x.public_key === pub);
         if (!p) return;
         currentPeerPublicKey = pub;
         currentPeerName = p.name;
         clearPeerDetailInterval();
+        // Highlight only the exact selected row
         document
           .querySelectorAll(".peer-row")
-          .forEach((r) =>
-            r.classList.toggle(
-              "active",
-              r.textContent.includes(pub.slice(0, 14))
-            )
-          );
+          .forEach((r) => r.classList.toggle("active", r.dataset.pubkey === pub));
         if (emptyState) emptyState.style.display = "none";
         if (peerEditor) peerEditor.style.display = "block";
         if (peerEditorTitle) peerEditorTitle.textContent = `Peer: ${p.name}`;
-        if (peerDetailPanel)
+        if (peerDetailPanel) {
           islandEl.querySelector(".details-region")?.classList.add("peer-open");
+          islandEl.classList.add("peer-open");
+          showPeerDetailPanel();
+        }
+        // Start shimmer loading on peer detail fields
+        setPeerDetailLoading(true);
         // Fetch detailed peer info
         try {
           const detail = await fetchJSON(
@@ -1148,6 +1386,7 @@
               peerDetailTitle.textContent = p.name;
               detailPublicKey.value = d.public_key || p.public_key || "";
               detailIP.value = d.ip || "";
+              detailEndpoint.value = d.endpoint || "";
               const runtime = detail.runtime || {};
               detailDownload.value = runtime.rx_human || p.download || "";
               detailUpload.value = runtime.tx_human || p.uploaded || "";
@@ -1195,6 +1434,7 @@
               peerDetailTitle.textContent = p.name;
               detailPublicKey.value = p.public_key || "";
               detailIP.value = "";
+              detailEndpoint.value = "";
               detailDownload.value = p.download || "";
               detailUpload.value = p.uploaded || "";
               detailHandshake.value = p.last_handshake_str || "—";
@@ -1213,6 +1453,9 @@
           }
         } catch (e) {
           /* toast already shown */
+        } finally {
+          // End shimmer loading regardless of outcome
+          setPeerDetailLoading(false);
         }
         originalPeerData = serializeForm();
         if (dirtyFlag) dirtyFlag.style.display = "none";
@@ -1233,6 +1476,10 @@
           );
           if (!detail || !detail.peer_data) return;
           const runtime = detail.runtime || {};
+          // Update endpoint (unlikely to change often but keep fresh)
+          if (detail?.peer_data?.endpoint && detailEndpoint) {
+            detailEndpoint.value = detail.peer_data.endpoint;
+          }
           // Update peer detail panel fields if still selected
           if (peerDetailTitle.textContent.trim() === currentPeerName) {
             // traffic + handshake
@@ -1354,8 +1601,11 @@
       }
       // Delete peer modal wiring
       const deletePeerModalMount = document.getElementById("deletePeerModal");
+      const deleteInterfaceModalMount = document.getElementById(
+        "deleteInterfaceModal"
+      );
       function buildDeletePeerModal(name) {
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="dpmClose" aria-label="Close">×</button>\n    <h3>Delete Peer</h3>\n    <div style="font-size:14px;color:#cfd8dc;">Are you sure you want to delete peer <b>${name}</b>?</div>\n    <div id="dpmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; margin-top:8px;"></div>\n    <div class="pm-actions">\n      <button type="button" id="dpmCancel" class="btn-danger btn-press">Cancel</button>\n      <button type="button" id="dpmDelete" class="btn-glow">Delete</button>\n    </div>\n  </div>\n</div>`;
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="dpmClose" aria-label="Close">×</button>\n    <h3>Delete Peer</h3>\n    <div style="font-size:14px;color:#cfd8dc;">Are you sure you want to delete peer <b>${name}</b>?</div>\n    <div id="dpmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; margin-top:8px;"></div>\n    <div class="pm-actions">\n      <button type="button" id="dpmCancel" class="btn-press">Cancel</button>\n      <button type="button" id="dpmDelete" class="btn-danger btn-press">Delete</button>\n    </div>\n  </div>\n</div>`;
       }
       async function openDeletePeerModal() {
         if (!currentInterface || !currentPeerName) {
@@ -1387,8 +1637,8 @@
             const res = await fetch(
               `${apiBase}/interfaces/${encodeURIComponent(
                 currentInterface
-              )}/peers/${encodeURIComponent(currentPeerName)}`,
-              { method: "DELETE", headers: headers() }
+              )}/peers/${encodeURIComponent(currentPeerName)}/delete`,
+              { method: "POST", headers: headers() }
             );
             if (!res.ok) {
               const d = await res.json().catch(() => ({}));
@@ -1402,6 +1652,8 @@
             lastPeerDetail = null;
             const detailsRegion = islandEl.querySelector(".details-region");
             if (detailsRegion) detailsRegion.classList.remove("peer-open");
+            islandEl.classList.remove("peer-open");
+            hidePeerDetailPanel();
             // Refresh peers
             await loadInterfaceAll();
           } catch (err) {
@@ -1411,9 +1663,137 @@
         };
       }
       if (btnDeletePeer) btnDeletePeer.onclick = openDeletePeerModal;
+      // Delete interface modal wiring (mirrors peer deletion)
+      function buildDeleteInterfaceModal(name) {
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="dimClose" aria-label="Close">×</button>\n    <h3>Delete Interface</h3>\n    <div style="font-size:14px;color:#cfd8dc;">Are you sure you want to delete interface <b>${name}</b>? This will remove its config and peers.</div>\n    <div id="dimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; margin-top:8px;"></div>\n    <div class="pm-actions">\n      <button type="button" id="dimCancel" class="btn-press">Cancel</button>\n      <button type="button" id="dimDelete" class="btn-danger btn-press">Delete</button>\n    </div>\n  </div>\n</div>`;
+      }
+      async function openDeleteInterfaceModal() {
+        if (!currentInterface) {
+          showToast("Select an interface first", false);
+          return;
+        }
+        deleteInterfaceModalMount.innerHTML =
+          buildDeleteInterfaceModal(currentInterface);
+        deleteInterfaceModalMount.style.display = "block";
+        const overlay = deleteInterfaceModalMount.querySelector(
+          ".peer-modal-overlay"
+        );
+        const btnClose = deleteInterfaceModalMount.querySelector("#dimClose");
+        const btnCancel = deleteInterfaceModalMount.querySelector("#dimCancel");
+        const btnGo = deleteInterfaceModalMount.querySelector("#dimDelete");
+        const feedback =
+          deleteInterfaceModalMount.querySelector("#dimFeedback");
+        function close() {
+          deleteInterfaceModalMount.style.display = "none";
+          deleteInterfaceModalMount.innerHTML = "";
+        }
+        btnClose.onclick = close;
+        btnCancel.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        btnGo.onclick = async () => {
+          feedback.style.color = "#a0b4c0";
+          feedback.textContent = "Deleting...";
+          try {
+            const name = currentInterface;
+            const res = await fetch(
+              `${apiBase}/interfaces/${encodeURIComponent(name)}/delete`,
+              { method: "POST", headers: headers() }
+            );
+            if (!res.ok) {
+              const d = await res.json().catch(() => ({}));
+              throw new Error(d.detail || res.statusText);
+            }
+            const payload = await res.json().catch(() => ({}));
+            // Update interface list from response
+            const list = Array.isArray(payload?.interfaces)
+              ? payload.interfaces
+              : [];
+            const desired = list
+              .map((obj) => ({
+                name: obj && typeof obj === "object" ? obj.name : obj,
+                active: obj && typeof obj === "object" ? !!obj.active : false,
+              }))
+              .filter((x) => !!x.name);
+            const existing = new Map();
+            Array.from(
+              interfacesContainer.querySelectorAll(".iface-item")
+            ).forEach((el) => {
+              const n = el.dataset.name;
+              if (n) existing.set(n, el);
+            });
+            // Remove deleted element (if still present)
+            existing.forEach((el, n) => {
+              if (!desired.find((d) => d.name === n)) {
+                el.remove();
+                existing.delete(n);
+              }
+            });
+            desired.forEach(({ name, active }) => {
+              let el = existing.get(name);
+              if (!el) {
+                el = document.createElement("div");
+                el.className = "iface-item";
+                el.dataset.name = name;
+                el.onclick = () => selectInterface(name);
+                el.innerHTML = `<span class=\"iface-name\"></span><span class=\"iface-pill status-pill small\"></span>`;
+                existing.set(name, el);
+              }
+              el.classList.toggle("active", false);
+              const ns = el.querySelector(".iface-name");
+              if (ns && ns.textContent !== name) ns.textContent = name;
+              const pill = el.querySelector(".iface-pill");
+              if (pill) {
+                pill.classList.toggle("ok", !!active);
+                pill.classList.toggle("bad", !active);
+                pill.textContent = active ? "active" : "inactive";
+                pill.title = active ? "Active" : "Inactive";
+              }
+              interfacesContainer.appendChild(el);
+            });
+            // Show placeholder when empty
+            let ph = interfacesContainer.querySelector(".iface-empty");
+            if (desired.length === 0) {
+              if (!ph) {
+                ph = document.createElement("div");
+                ph.className = "iface-empty";
+                ph.style.cssText =
+                  "padding:14px 16px;font-size:12px;color:#78909c;";
+                ph.textContent = "No interfaces";
+                interfacesContainer.appendChild(ph);
+              }
+            } else if (ph) {
+              ph.remove();
+            }
+            // Deselect current interface and reverse selection animation
+            const detailsRegion = islandEl.querySelector(".details-region");
+            if (detailsRegion) {
+              detailsRegion.classList.remove("peer-open");
+            }
+            islandEl.classList.remove("peer-open");
+            hidePeerDetailPanel();
+            islandEl.classList.remove("expanded");
+            ifaceTitle.textContent = "";
+            ifaceMeta.innerHTML = "";
+            peersContainer.innerHTML = "";
+            emptyState.style.display = "block";
+            clearPeerDetailInterval();
+            clearInterfaceRefreshInterval();
+            document
+              .querySelectorAll(".iface-item")
+              .forEach((i) => i.classList.remove("active"));
+            currentInterface = null;
+            close();
+            showToast("Interface deleted");
+          } catch (err) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = `Error: ${err.message || "Delete failed"}`;
+          }
+        };
+      }
       if (btnDeleteInterface)
-        btnDeleteInterface.onclick = () =>
-          showToast("Interface deletion not implemented yet", false);
+        btnDeleteInterface.onclick = openDeleteInterfaceModal;
       if (btnEnableService)
         btnEnableService.onclick = async () => {
           if (!currentInterface) {
@@ -1747,31 +2127,286 @@
       if (btnOpenAddPeer)
         btnOpenAddPeer.addEventListener("click", openAddPeerModal);
       if (btnAddPeer) btnAddPeer.onclick = openAddPeerModal;
+      // Edit Interface modal
+      function buildEditInterfaceModal(prefill, loading = false) {
+        const name = prefill?.name ?? currentInterface ?? "";
+        const port = prefill?.port ?? currentServer?.port ?? "";
+        const network = prefill?.network ?? currentServer?.network ?? "";
+        const public_ip = prefill?.public_ip ?? currentServer?.public_ip ?? "";
+        const dns = prefill?.dns ?? currentServer?.dns ?? "";
+        const dis = loading ? 'disabled aria-busy="true"' : "";
+        const cls = loading ? " input-loading" : "";
+        const chkDis = loading ? "disabled" : "";
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="eimClose" aria-label="Close">×</button>\n    <h3>Edit Interface</h3>\n    <form id="eimForm" data-loading="${
+          loading ? 1 : 0
+        }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="eimName">Name</label>\n        <input ${dis} class="${cls.trim()}" id="eimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimPort">Port</label>\n        <input ${dis} class="${cls.trim()}" id="eimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimNetwork">Network</label>\n        <input ${dis} class="${cls.trim()}" id="eimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimPublicIP">Public IP</label>\n        <input ${dis} class="${cls.trim()}" id="eimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimDNS">DNS</label>\n        <input ${dis} class="${cls.trim()}" id="eimDNS" name="dns" value="${dns}" placeholder="e.g. 1.1.1.1"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="eimIgnore" ${chkDis} checked />\n        <label for="eimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="eimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word;"></div>\n      <div class="pm-actions">\n        <button type="button" id="eimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="eimValidate" class="btn-glow">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+      }
+      async function openEditInterfaceModal() {
+        if (!currentInterface) {
+          showToast("Select an interface first", false);
+          return;
+        }
+        if (!editInterfaceModalMount) return;
+        // show immediately (no loading fetch needed)
+        editInterfaceModalMount.innerHTML = buildEditInterfaceModal({}, false);
+        editInterfaceModalMount.style.display = "block";
+        const overlay = editInterfaceModalMount.querySelector(
+          ".peer-modal-overlay"
+        );
+        const btnClose = editInterfaceModalMount.querySelector("#eimClose");
+        const btnCancel = editInterfaceModalMount.querySelector("#eimCancel");
+        const form = editInterfaceModalMount.querySelector("#eimForm");
+        const feedback = editInterfaceModalMount.querySelector("#eimFeedback");
+        const nameInput = editInterfaceModalMount.querySelector("#eimName");
+        const portInput = editInterfaceModalMount.querySelector("#eimPort");
+        const networkInput =
+          editInterfaceModalMount.querySelector("#eimNetwork");
+  const publicIpInput = editInterfaceModalMount.querySelector("#eimPublicIP");
+  const dnsInput = editInterfaceModalMount.querySelector("#eimDNS");
+        const ignoreChk = editInterfaceModalMount.querySelector("#eimIgnore");
+        function close() {
+          editInterfaceModalMount.style.display = "none";
+          editInterfaceModalMount.innerHTML = "";
+        }
+        btnClose.onclick = close;
+        btnCancel.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          // Build ValidateInterface payload (exclude dns and public_ip)
+          const newName = (nameInput.value || "").trim();
+          const newPortStr = (portInput.value || "").trim();
+          const newNetwork = (networkInput.value || "").trim();
+          const newPort = newPortStr
+            ? parseInt(newPortStr, 10)
+            : currentServer?.port ?? 0;
+          const body = {
+            interface: newName || currentInterface,
+            port: Number.isFinite(newPort) ? newPort : currentServer?.port || 0,
+            network: newNetwork || currentServer?.network || "",
+            ignore_range_check: !!ignoreChk.checked,
+            old_interface: currentInterface,
+            old_port: currentServer?.port ?? null,
+            old_network: currentServer?.network ?? null,
+          };
+          feedback.style.color = "#a0b4c0";
+          feedback.textContent = "Validating...";
+          try {
+            const res = await fetch(`${apiBase}/interfaces/validate`, {
+              method: "POST",
+              headers: headers(),
+              body: JSON.stringify(body),
+            });
+            const text = await res.text();
+            let json;
+            try {
+              json = JSON.parse(text);
+            } catch {
+              json = { raw: text };
+            }
+            if (!res.ok) {
+              feedback.style.color = "#ff6b6b";
+              feedback.textContent =
+                typeof json === "object" && json?.detail
+                  ? `Error: ${json.detail}`
+                  : `Error: ${text}`;
+              return;
+            }
+            feedback.style.color = "#9cf0b7";
+            feedback.textContent = "Validated succesfuly";
+
+            // On successful validation, apply changes via server/update
+            const updBody = {
+              // include only non-empty new values; backend compares against old_* to decide
+              name:
+                newName && newName !== currentInterface ? newName : undefined,
+              port: Number.isFinite(newPort) ? newPort : undefined,
+              network: newNetwork ? newNetwork : undefined,
+              public_ip: (publicIpInput?.value || "").trim() || undefined,
+              dns: (dnsInput?.value || "").trim() || undefined,
+              old_port: currentServer?.port ?? null,
+              old_dns: currentServer?.dns ?? null,
+              old_public_ip: currentServer?.public_ip ?? null,
+              old_network: currentServer?.network ?? null,
+            };
+            feedback.style.color = "#32c861";
+            feedback.textContent = "Validated. Applying changes...";
+            try {
+              const updRes = await fetch(
+                `${apiBase}/interfaces/${encodeURIComponent(
+                  currentInterface
+                )}/server/update`,
+                {
+                  method: "POST",
+                  headers: headers(),
+                  body: JSON.stringify(updBody),
+                }
+              );
+              const updPayload = await updRes.json().catch(() => ({}));
+              if (!updRes.ok) {
+                throw new Error(
+                  updPayload?.detail || updRes.statusText || "Update failed"
+                );
+              }
+              // Update interface list UI using returned list
+              const list = Array.isArray(updPayload?.interfaces)
+                ? updPayload.interfaces
+                : [];
+              const desired = list
+                .map((obj) => ({
+                  name: obj && typeof obj === "object" ? obj.name : obj,
+                  active: obj && typeof obj === "object" ? !!obj.active : false,
+                }))
+                .filter((x) => !!x.name);
+              const existing = new Map();
+              Array.from(
+                interfacesContainer.querySelectorAll(".iface-item")
+              ).forEach((el) => {
+                const n = el.dataset.name;
+                if (n) existing.set(n, el);
+              });
+              // Remove items no longer present
+              existing.forEach((el, n) => {
+                if (!desired.find((d) => d.name === n)) {
+                  el.remove();
+                  existing.delete(n);
+                }
+              });
+              desired.forEach(({ name, active }) => {
+                let el = existing.get(name);
+                if (!el) {
+                  el = document.createElement("div");
+                  el.className = "iface-item";
+                  el.dataset.name = name;
+                  el.onclick = () => selectInterface(name);
+                  el.innerHTML = `<span class="iface-name"></span><span class="iface-pill status-pill small"></span>`;
+                  existing.set(name, el);
+                }
+                const nameSpan = el.querySelector(".iface-name");
+                if (nameSpan && nameSpan.textContent !== name)
+                  nameSpan.textContent = name;
+                const pill = el.querySelector(".iface-pill");
+                if (pill) {
+                  pill.classList.toggle("ok", !!active);
+                  pill.classList.toggle("bad", !active);
+                  pill.textContent = active ? "active" : "inactive";
+                  pill.title = active ? "Active" : "Inactive";
+                }
+              });
+              desired.forEach(({ name }) => {
+                const el = existing.get(name);
+                if (el) interfacesContainer.appendChild(el);
+              });
+              // Determine final selected interface name (may have changed)
+              const updatedName =
+                updPayload?.interface || newName || currentInterface;
+              currentInterface = updatedName;
+              // Update selection highlight
+              document
+                .querySelectorAll(".iface-item")
+                .forEach((i) =>
+                  i.classList.toggle("active", i.dataset.name === updatedName)
+                );
+              // Update header and stats from new_data
+              const nd = updPayload?.new_data || {};
+              const s = nd.server || {};
+              serverNetwork = s.network || "";
+              currentServer = s;
+              ifaceTitle.textContent = updatedName;
+              // active pill
+              const isActive = !!nd.active;
+              if (ifaceActivePill) {
+                ifaceActivePill.style.display = "inline-block";
+                ifaceActivePill.classList.toggle("ok", isActive);
+                ifaceActivePill.classList.toggle("bad", !isActive);
+                ifaceActivePill.textContent = isActive ? "active" : "inactive";
+              }
+              // stats
+              const peerCount = nd.peer_count ?? (nd.peers ? Object.keys(nd.peers).length : 0);
+              const stats = [
+                { label: "Network", value: s.network || "-" },
+                { label: "relay ip", value: s.ip || "—" },
+                { label: "Port", value: s.port || "-" },
+                { label: "Peers", value: peerCount },
+                { label: "Public IP", value: s.public_ip || "—" },
+              ];
+              ifaceMeta.innerHTML = stats
+                .map(
+                  (st) =>
+                    `<div class="iface-stat"><span class="label">${st.label}</span><span>${st.value}</span></div>`
+                )
+                .join("");
+              // peers list from new_data
+              let peersData = nd.peers || {};
+              if (typeof peersData === "string") {
+                try {
+                  const parsed = JSON.parse(peersData);
+                  peersData = parsed?.peers || parsed || {};
+                } catch {
+                  peersData = {};
+                }
+              }
+              const names = Object.keys(peersData);
+              peers = names.map((n) => {
+                const info = peersData[n] || {};
+                return {
+                  public_key: info.public_key || n,
+                  name: n,
+                  active: !!info.active,
+                  last_handshake: info.last_handshake || null,
+                  last_handshake_str: info.last_handshake_str || "",
+                  download: info.download || "0 KiB",
+                  uploaded: info.uploaded || "0 KiB",
+                };
+              });
+              renderPeerList();
+              // Keep island expanded (no peer open) after server update
+              islandEl.classList.add("expanded");
+              islandEl.querySelector(".details-region")?.classList.remove("peer-open");
+              hidePeerDetailPanel();
+              emptyState.style.display = "block";
+              // Done
+              close();
+              showToast("Server updated");
+              // Success modal for edit
+              const finalPort = currentServer?.port || s.port || updPayload?.port;
+              showInterfaceSuccess("edited", currentInterface, finalPort);
+            } catch (err) {
+              feedback.style.color = "#ff6b6b";
+              feedback.textContent = `Update failed: ${err?.message || "error"}`;
+            }
+          } catch (err) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = `Error: ${
+              err?.message || "validation failed"
+            }`;
+          }
+        });
+      }
+      if (btnServerSettings) btnServerSettings.onclick = openEditInterfaceModal;
       if (btnCancelEdit)
         btnCancelEdit.onclick = () => {
           if (originalPeerData) openPeer(currentPeerPublicKey);
         };
       // Add Interface modal
-      function buildAddInterfaceModal(prefill) {
+      function buildAddInterfaceModal(prefill, loading = false) {
         const name = prefill?.name || "";
         const port = prefill?.port ?? "";
         const network = prefill?.network || "";
         const public_ip = prefill?.public_ip || "";
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="aimClose" aria-label="Close">×</button>\n    <h3>Add Interface</h3>\n    <form id="aimForm" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="aimName">Name</label>\n        <input id="aimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPort">Port</label>\n        <input id="aimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimNetwork">Network</label>\n        <input id="aimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPublicIP">Public IP</label>\n        <input id="aimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="aimIgnore" checked />\n        <label for="aimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="aimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="aimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="aimCreate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+        const dis = loading ? 'disabled aria-busy="true"' : "";
+        const cls = loading ? " input-loading" : "";
+        const chkDis = loading ? "disabled" : "";
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="aimClose" aria-label="Close">×</button>\n    <h3>Add Interface</h3>\n    <form id="aimForm" data-loading="${
+          loading ? 1 : 0
+        }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="aimName">Name</label>\n        <input ${dis} class="${cls.trim()}" id="aimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPort">Port</label>\n        <input ${dis} class="${cls.trim()}" id="aimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimNetwork">Network</label>\n        <input ${dis} class="${cls.trim()}" id="aimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPublicIP">Public IP</label>\n        <input ${dis} class="${cls.trim()}" id="aimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="aimIgnore" ${chkDis} checked />\n        <label for="aimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="aimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="aimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="aimCreate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`;
       }
       async function openAddInterfaceModal() {
         if (!addInterfaceModalMount) return;
-        let defaults = null;
-        try {
-          defaults = await fetchJSON(`${apiBase}/interfaces/defaults`, {
-            headers: headers(),
-          });
-        } catch (_) {
-          defaults = {};
-        }
-        addInterfaceModalMount.innerHTML = buildAddInterfaceModal(
-          defaults || {}
-        );
+        // Render instantly in loading state
+        addInterfaceModalMount.innerHTML = buildAddInterfaceModal({}, true);
         addInterfaceModalMount.style.display = "block";
         const overlay = addInterfaceModalMount.querySelector(
           ".peer-modal-overlay"
@@ -1790,12 +2425,166 @@
         overlay.addEventListener("click", (e) => {
           if (e.target === overlay) close();
         });
-        nameInput?.focus();
-        form.addEventListener("submit", (e) => {
+        let isLoading = true;
+        // Kick off async fetch of defaults; populate and unlock when ready
+        (async () => {
+          let defaults = {};
+          try {
+            defaults =
+              (await fetchJSON(`${apiBase}/interfaces/defaults`, {
+                headers: headers(),
+              })) || {};
+          } catch (_) {
+            defaults = {};
+          }
+          // Update values
+          const _name = addInterfaceModalMount.querySelector("#aimName");
+          const _port = addInterfaceModalMount.querySelector("#aimPort");
+          const _net = addInterfaceModalMount.querySelector("#aimNetwork");
+          const _pip = addInterfaceModalMount.querySelector("#aimPublicIP");
+          if (_name && !_name.value) _name.value = defaults.name || "";
+          if (_port && !_port.value) _port.value = defaults.port ?? "";
+          if (_net && !_net.value) _net.value = defaults.network || "";
+          if (_pip && !_pip.value) _pip.value = defaults.public_ip || "";
+          // Unlock inputs
+          [_name, _port, _net, _pip].forEach((el) => {
+            if (el) {
+              el.removeAttribute("disabled");
+              el.classList.remove("input-loading");
+              el.removeAttribute("aria-busy");
+            }
+          });
+          const chk = addInterfaceModalMount.querySelector("#aimIgnore");
+          if (chk) chk.removeAttribute("disabled");
+          isLoading = false;
+          form?.setAttribute("data-loading", "0");
+          // Now focus the name field
+          _name?.focus();
+        })();
+        form.addEventListener("submit", async (e) => {
           e.preventDefault();
-          feedback.style.color = "#ff6b6b";
-          feedback.textContent = "Create not implemented yet";
-          // Intentionally no create logic per request
+          if (form?.getAttribute("data-loading") === "1") {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Please wait for defaults...";
+            return;
+          }
+          const name = (
+            addInterfaceModalMount.querySelector("#aimName")?.value || ""
+          ).trim();
+          const portStr = (
+            addInterfaceModalMount.querySelector("#aimPort")?.value || ""
+          ).trim();
+          const network = (
+            addInterfaceModalMount.querySelector("#aimNetwork")?.value || ""
+          ).trim();
+          const public_ip = (
+            addInterfaceModalMount.querySelector("#aimPublicIP")?.value || ""
+          ).trim();
+          const ignore =
+            !!addInterfaceModalMount.querySelector("#aimIgnore")?.checked;
+          const port = parseInt(portStr, 10);
+          if (!name) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Name is required";
+            return;
+          }
+          if (!Number.isFinite(port)) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Port is required";
+            return;
+          }
+          if (!network) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Network is required";
+            return;
+          }
+          feedback.style.color = "#a0b4c0";
+          feedback.textContent = "Validating...";
+          try {
+            const validateBody = {
+              interface: name,
+              port,
+              network,
+              ignore_range_check: ignore,
+            };
+            const v = await fetchJSON(`${apiBase}/interfaces/validate`, {
+              method: "POST",
+              headers: headers(),
+              body: JSON.stringify(validateBody),
+            });
+            if (!v || !v.ok) {
+              throw new Error(v?.detail || "Validation failed");
+            }
+            feedback.style.color = "#32c861";
+            feedback.textContent = "Validated. Creating...";
+            const createBody = { interface: name, port, network };
+            if (public_ip) createBody.public_ip = public_ip;
+            const res = await fetchJSON(`${apiBase}/interfaces/add`, {
+              method: "POST",
+              headers: headers(),
+              body: JSON.stringify(createBody),
+            });
+            // Update interface list from returned data
+            const list = Array.isArray(res?.interfaces) ? res.interfaces : [];
+            if (list.length) {
+              const desired = list
+                .map((obj) => ({
+                  name: obj && typeof obj === "object" ? obj.name : obj,
+                  active: obj && typeof obj === "object" ? !!obj.active : false,
+                }))
+                .filter((x) => !!x.name);
+              const existing = new Map();
+              Array.from(
+                interfacesContainer.querySelectorAll(".iface-item")
+              ).forEach((el) => {
+                const n = el.dataset.name;
+                if (n) existing.set(n, el);
+              });
+              existing.forEach((el, n) => {
+                if (!desired.find((d) => d.name === n)) {
+                  el.remove();
+                  existing.delete(n);
+                }
+              });
+              desired.forEach(({ name, active }) => {
+                let el = existing.get(name);
+                if (!el) {
+                  el = document.createElement("div");
+                  el.className = "iface-item";
+                  el.dataset.name = name;
+                  el.onclick = () => selectInterface(name);
+                  el.innerHTML = `<span class="iface-name"></span><span class="iface-pill status-pill small"></span>`;
+                  existing.set(name, el);
+                }
+                el.classList.toggle("active", name === currentInterface);
+                const nameSpan = el.querySelector(".iface-name");
+                if (nameSpan && nameSpan.textContent !== name)
+                  nameSpan.textContent = name;
+                const pill = el.querySelector(".iface-pill");
+                if (pill) {
+                  pill.classList.toggle("ok", !!active);
+                  pill.classList.toggle("bad", !active);
+                  pill.textContent = active ? "active" : "inactive";
+                  pill.title = active ? "Active" : "Inactive";
+                }
+              });
+              desired.forEach(({ name }) => {
+                const el = existing.get(name);
+                if (el) interfacesContainer.appendChild(el);
+              });
+            } else {
+              await loadInterfaces();
+            }
+            close();
+            showToast("Interface created");
+            // Select the newly created interface
+            await selectInterface(name);
+            // After selection, display guidance modal
+            showInterfaceSuccess("created", name, port);
+          } catch (err) {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = `Error: ${err.message || "Creation failed"}`;
+          }
         });
       }
       if (btnOpenAddInterface)
@@ -1849,23 +2638,23 @@
           showQrModal(name);
         });
       // Edit Peer modal
-      function buildEditPeerModal(prefill) {
+      function buildEditPeerModal(prefill, loading = false) {
         const n = prefill?.name || "";
         const ip = prefill?.ip || "";
         const allowed = prefill?.allowed_ips || "";
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="epmClose" aria-label="Close">×</button>\n    <h3>Edit Peer</h3>\n    <form id="epmForm" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="epmName">Peer Name</label>\n        <input id="epmName" name="name" value="${n}" placeholder="peer name" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmIP">Peer IP</label>\n        <input id="epmIP" name="ip" value="${ip}" placeholder="e.g. 10.0.0.2/32"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmAllowed">Allowed IPs</label>\n        <input id="epmAllowed" name="allowed_ips" value="${allowed}" placeholder="e.g. 0.0.0.0/0, ::/0"/>\n      </div>\n      <div id="epmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="epmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="epmApply" class="btn-glow">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+        const dis = loading ? 'disabled aria-busy="true"' : "";
+        const cls = loading ? " input-loading" : "";
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="epmClose" aria-label="Close">×</button>\n    <h3>Edit Peer</h3>\n    <form id="epmForm" data-loading="${
+          loading ? 1 : 0
+        }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="epmName">Peer Name</label>\n        <input ${dis} class="${cls.trim()}" id="epmName" name="name" value="${n}" placeholder="peer name" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmIP">Peer IP</label>\n        <input ${dis} class="${cls.trim()}" id="epmIP" name="ip" value="${ip}" placeholder="e.g. 10.0.0.2/32"/>\n      </div>\n      <div class="pm-field">\n        <label for="epmAllowed">Allowed IPs</label>\n        <input ${dis} class="${cls.trim()}" id="epmAllowed" name="allowed_ips" value="${allowed}" placeholder="e.g. 0.0.0.0/0, ::/0"/>\n      </div>\n      <div id="epmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="epmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="epmApply" class="btn-glow">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`;
       }
       async function openEditPeerModal() {
         if (!currentInterface || !currentPeerName) {
           showToast("Select a peer first", false);
           return;
         }
-        const prefill = {
-          name: currentPeerName,
-          ip: lastPeerDetail?.peer_data?.ip || "",
-          allowed_ips: lastPeerDetail?.peer_data?.allowed_ips || "",
-        };
-        editPeerModalMount.innerHTML = buildEditPeerModal(prefill);
+        // Open instantly in loading state
+        editPeerModalMount.innerHTML = buildEditPeerModal({}, true);
         editPeerModalMount.style.display = "block";
         const overlay = editPeerModalMount.querySelector(".peer-modal-overlay");
         const form = editPeerModalMount.querySelector("#epmForm");
@@ -1875,7 +2664,6 @@
         const nameInput = editPeerModalMount.querySelector("#epmName");
         const ipInput = editPeerModalMount.querySelector("#epmIP");
         const allowedInput = editPeerModalMount.querySelector("#epmAllowed");
-        nameInput.focus();
         function close() {
           editPeerModalMount.style.display = "none";
           editPeerModalMount.innerHTML = "";
@@ -1885,6 +2673,37 @@
         overlay.addEventListener("click", (e) => {
           if (e.target === overlay) close();
         });
+        // Populate and unlock asynchronously (use existing detail if available, otherwise fetch)
+        (async () => {
+          let ip = lastPeerDetail?.peer_data?.ip || "";
+          let allowed = lastPeerDetail?.peer_data?.allowed_ips || "";
+          if (!ip || !allowed) {
+            try {
+              const d = await fetchJSON(
+                `${apiBase}/interfaces/${encodeURIComponent(
+                  currentInterface
+                )}/peers/${encodeURIComponent(currentPeerName)}`,
+                { headers: headers() }
+              );
+              ip = d?.peer_data?.ip || ip || "";
+              allowed = d?.peer_data?.allowed_ips || allowed || "";
+            } catch (_) {}
+          }
+          // Fill fields
+          if (nameInput) nameInput.value = currentPeerName;
+          if (ipInput) ipInput.value = ip;
+          if (allowedInput) allowedInput.value = allowed;
+          // Unlock
+          [nameInput, ipInput, allowedInput].forEach((el) => {
+            if (el) {
+              el.removeAttribute("disabled");
+              el.classList.remove("input-loading");
+              el.removeAttribute("aria-busy");
+            }
+          });
+          form?.setAttribute("data-loading", "0");
+          nameInput?.focus();
+        })();
         form.addEventListener("submit", async (e) => {
           e.preventDefault();
           feedback.style.color = "#a0b4c0";
@@ -1893,6 +2712,11 @@
           const ipVal =
             ipInput.value.trim() || lastPeerDetail?.peer_data?.ip || "";
           const newAllowed = allowedInput.value.trim();
+          if (form?.getAttribute("data-loading") === "1") {
+            feedback.style.color = "#ff6b6b";
+            feedback.textContent = "Please wait for current values...";
+            return;
+          }
           if (!name) {
             feedback.style.color = "#ff6b6b";
             feedback.textContent = "Name required";
@@ -1937,9 +2761,9 @@
               const upd = await fetchJSON(
                 `${apiBase}/interfaces/${encodeURIComponent(
                   currentInterface
-                )}/peers/${encodeURIComponent(currentPeerName)}`,
+                )}/peers/${encodeURIComponent(currentPeerName)}/update`,
                 {
-                  method: "PATCH",
+                  method: "POST",
                   headers: headers(),
                   body: JSON.stringify(patchBody),
                 }
@@ -2005,14 +2829,229 @@
           } catch (_) {}
         }, 5000);
       })();
-      // Logout confirmation
+      // Clicking the top-left PyGuard logo/title resets selection to initial state
+      function resetToInitialState() {
+        clearPeerDetailInterval();
+        clearInterfaceRefreshInterval();
+        // Remove any active states
+        document
+          .querySelectorAll(".peer-row.active")
+          .forEach((el) => el.classList.remove("active"));
+        document
+          .querySelectorAll(".iface-item")
+          .forEach((el) => el.classList.remove("active"));
+        const detailsRegion = islandEl.querySelector(".details-region");
+        if (detailsRegion) detailsRegion.classList.remove("peer-open");
+  islandEl.classList.remove("peer-open");
+  islandEl.classList.remove("expanded");
+  hidePeerDetailPanel();
+        // Clear UI texts
+        const ifaceTitleEl = document.getElementById("ifaceTitle");
+        const ifaceMetaEl = document.getElementById("ifaceStats");
+        const peersContainerEl = document.getElementById("peersContainer");
+        if (ifaceTitleEl) ifaceTitleEl.textContent = "Select an interface";
+        if (ifaceMetaEl) ifaceMetaEl.innerHTML = "";
+        if (peersContainerEl) peersContainerEl.innerHTML = "";
+        const pill = document.getElementById("ifaceActivePill");
+        if (pill) pill.style.display = "none";
+        const currentLabel = document.getElementById("current-interface-label");
+        if (currentLabel) currentLabel.textContent = "";
+        // Reset state
+        currentPeerPublicKey = null;
+        currentPeerName = null;
+        lastPeerDetail = null;
+        currentInterface = null;
+        // Ensure empty state message is visible in peers panel
+        const emptyStateEl = document.getElementById("emptyState");
+        if (emptyStateEl) emptyStateEl.style.display = "block";
+      }
+      if (logoTitle) {
+        logoTitle.style.cursor = "pointer";
+        logoTitle.addEventListener("click", resetToInitialState);
+      }
+      // Logout confirmation (styled modal)
       const logoutLink = document.querySelector(".logout");
+      const logoutModalMount = document.getElementById("logoutModal");
+      function buildLogoutModal() {
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="lomClose" aria-label="Close">×</button>\n    <h3>Logout</h3>\n    <div style="font-size:14px;color:#cfd8dc;">Are you sure you want to log out?</div>\n    <div class="pm-actions">\n      <button type="button" id="lomCancel" class="btn-press">Cancel</button>\n      <button type="button" id="lomLogout" class="btn-danger btn-press">Logout</button>\n    </div>\n  </div>\n</div>`;
+      }
+      function openLogoutModal(anchor) {
+        logoutModalMount.innerHTML = buildLogoutModal();
+        logoutModalMount.style.display = "block";
+        const overlay = logoutModalMount.querySelector(".peer-modal-overlay");
+        const btnClose = logoutModalMount.querySelector("#lomClose");
+        const btnCancel = logoutModalMount.querySelector("#lomCancel");
+        const btnLogout = logoutModalMount.querySelector("#lomLogout");
+        function close() {
+          logoutModalMount.style.display = "none";
+          logoutModalMount.innerHTML = "";
+        }
+        btnClose.onclick = close;
+        btnCancel.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        btnLogout.onclick = () => {
+          window.location.href = anchor?.href || "/logout";
+        };
+      }
       if (logoutLink) {
         logoutLink.addEventListener("click", (e) => {
-          const ok = window.confirm("Are you sure you want to log out?");
-          if (!ok) {
-            e.preventDefault();
-          }
+          e.preventDefault();
+          openLogoutModal(logoutLink);
+        });
+      }
+
+      // Reusable Interface Success / Guidance Modal
+      const interfaceSuccessMount = document.getElementById("interfaceSuccessModal");
+      const settingsModalMount = document.getElementById('settingsModal');
+      const btnOpenSettings = document.getElementById('btnOpenSettings');
+      function buildSettingsModal(activeCat = 'password') {
+        return `\n<div class=\"peer-modal-overlay\">\n  <div class=\"settings-modal\" role=\"dialog\" aria-modal=\"true\">\n    <button class=\"settings-close-btn\" id=\"settingsClose\" aria-label=\"Close\">×</button>\n    <div class=\"settings-left\">\n      <h4>Settings</h4>\n      <ul class=\"settings-nav\">\n        <li data-cat=\"password\" class=\"${activeCat==='password'?'active':''}\">Change Password</li>\n      </ul>\n    </div>\n    <div class=\"settings-content\" id=\"settingsContent\">\n      ${renderSettingContent(activeCat)}\n    </div>\n  </div>\n</div>`;
+      }
+      function renderSettingContent(cat){
+        if(cat==='password'){
+          return `<div id=\"passwordSetting\">\n  <h3>Change Password</h3>\n  <p style=\"margin:0;font-size:13px;color:#90a4ae;line-height:1.5;\">Update the administrative password. After changing, sessions may require re-authentication.</p>\n  <form id=\"cpForm\" class=\"settings-form\" autocomplete=\"off\">\n    <div class=\"settings-field\">\n      <label for=\"cpOld\">Current Password</label>\n      <input id=\"cpOld\" name=\"old_password\" type=\"password\" required autocomplete=\"current-password\" />\n    </div>\n    <div class=\"settings-field\">\n      <label for=\"cpNew1\">New Password</label>\n      <input id=\"cpNew1\" name=\"new_password1\" type=\"password\" required autocomplete=\"new-password\" />\n    </div>\n    <div class=\"settings-field\">\n      <label for=\"cpNew2\">Confirm New Password</label>\n      <input id=\"cpNew2\" name=\"new_password2\" type=\"password\" required autocomplete=\"new-password\" />\n    </div>\n    <div id=\"cpFeedback\"></div>\n    <div style=\"display:flex; gap:12px; justify-content:flex-end;\">\n      <button type=\"button\" id=\"cpCancel\" class=\"btn-danger btn-press\">Cancel</button>\n      <button type=\"submit\" id=\"cpSubmit\" class=\"btn-glow\">Change</button>\n    </div>\n  </form>\n</div>`;
+        }
+        return `<div><h3>Unknown</h3><p style=\"font-size:13px;color:#90a4ae;\">Category not found.</p></div>`;
+      }
+      function openSettingsModal(cat='password'){
+        if(!settingsModalMount) return;
+        settingsModalMount.innerHTML = buildSettingsModal(cat);
+        settingsModalMount.style.display='block';
+        const overlay = settingsModalMount.querySelector('.peer-modal-overlay');
+        const closeBtn = settingsModalMount.querySelector('#settingsClose');
+        const navItems = settingsModalMount.querySelectorAll('.settings-nav li');
+        const content = settingsModalMount.querySelector('#settingsContent');
+        function close(){ settingsModalMount.style.display='none'; settingsModalMount.innerHTML=''; }
+        closeBtn.onclick = close;
+        overlay.addEventListener('click', e => { if(e.target===overlay) close(); });
+        navItems.forEach(li => li.addEventListener('click', () => { navItems.forEach(n=>n.classList.remove('active')); li.classList.add('active'); const c = li.getAttribute('data-cat'); content.innerHTML = renderSettingContent(c); wirePasswordForm(); }));
+        wirePasswordForm();
+      }
+      function wirePasswordForm(){
+        const form = settingsModalMount.querySelector('#cpForm');
+        if(!form) return;
+        const oldEl = form.querySelector('#cpOld');
+        const n1El = form.querySelector('#cpNew1');
+        const n2El = form.querySelector('#cpNew2');
+        const feedback = form.querySelector('#cpFeedback');
+        const cancelBtn = form.querySelector('#cpCancel');
+        const submitBtn = form.querySelector('#cpSubmit');
+        function setFeedback(msg, ok=true){ if(feedback){ feedback.style.color = ok ? '#9cf0b7' : '#ff6b6b'; feedback.textContent = msg; } }
+        cancelBtn.onclick = () => { settingsModalMount.style.display='none'; settingsModalMount.innerHTML=''; };
+        form.addEventListener('submit', async e => {
+          e.preventDefault();
+          if(!oldEl.value){ setFeedback('Current password required', false); return; }
+          if(!n1El.value || !n2El.value){ setFeedback('New password fields required', false); return; }
+          if(n1El.value !== n2El.value){ setFeedback('New passwords do not match', false); return; }
+          if(n1El.value.length < 1){ setFeedback('Password too short', false); return; }
+          setFeedback('Changing...', true);
+          submitBtn.disabled = true; const orig = submitBtn.textContent; submitBtn.textContent='Working...';
+          try {
+            const res = await fetch(`${apiBase}/change-password`, { method:'POST', headers:headers(), body: JSON.stringify({ old_password: oldEl.value, new_password: n1El.value }) });
+            let data = {}; try { data = await res.json(); } catch(_) {}
+            if(!res.ok) throw new Error(data.detail || res.statusText);
+            setFeedback('Password changed successfully');
+            showToast('Password changed');
+            setTimeout(()=>{ settingsModalMount.style.display='none'; settingsModalMount.innerHTML=''; }, 1200);
+          } catch(err){
+            setFeedback(err.message || 'Change failed', false);
+            showToast(err.message || 'Change failed', false);
+          } finally { submitBtn.disabled=false; submitBtn.textContent=orig; }
+        });
+      }
+      if(btnOpenSettings) btnOpenSettings.addEventListener('click', ()=> openSettingsModal('password'));
+      function buildInterfaceSuccessModal(kind, iface, port) {
+        const heading =
+          kind === "edited"
+            ? "Interface edited successfully!"
+            : kind === "activated"
+            ? "Interface activated successfully!"
+            : "Interface created successfully!";
+        const p = port || "<port>";
+        const i = iface || "<iface>";
+        const fwCmd1 = `ufw allow ${p}/udp`;
+        const fwCmd2 = `ufw route allow in on ${i} out on ${i}`;
+  const id1 = `pgc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+  const id2 = `pgc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+  const id3 = `pgc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`; // sysctl block
+  return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" style="max-width:640px;" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="ismClose" aria-label="Close">×</button>\n    <h3 style="margin-top:0;">${heading}</h3>\n    <div style="font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready. To ensure full connectivity and proper WireGuard operation, review the recommended system steps below.</div>\n      <ol style="margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;">\n        <li>Allow WireGuard traffic — port <b>${p}</b> must be open and publicly reachable end-to-end (host firewall, upstream router/NAT, cloud security group):<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id1}">Copy</button><code id="${id1}">${fwCmd1}</code></div>For peer-to-peer routing between clients:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id2}">Copy</button><code id="${id2}">${fwCmd2}</code></div><div style="margin-top:6px;font-size:11px;color:#90a4ae;">These commands plus external firewall/NAT rules ensure peers can reach the interface.</div></li>\n        <li>Enable packet forwarding system-wide:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id3}">Copy</button><code id="${id3}">sysctl -w net.ipv4.ip_forward=1\n# (optional IPv6)\nsysctl -w net.ipv6.conf.all.forwarding=1</code></div><span style="display:block;margin-top:4px;">Persist in /etc/sysctl.conf for reboot survival.</span></li>\n      </ol>\n    </div>\n    <div class="pm-actions" style="margin-top:18px;justify-content:flex-end;gap:10px;">\n      <button type="button" id="ismApplyRules" class="btn-glow pg-fixed-btn" style="background:#1f3a4d;">Apply Rules</button>\n      <button type="button" id="ismUnderstand" class="btn-glow">I Understand</button>\n    </div>\n  </div>\n</div>`;
+      }
+      function showInterfaceSuccess(kind, iface, port) {
+        if (!interfaceSuccessMount) return;
+        interfaceSuccessMount.innerHTML = buildInterfaceSuccessModal(kind, iface, port);
+        interfaceSuccessMount.style.display = "block";
+        const overlay = interfaceSuccessMount.querySelector(".peer-modal-overlay");
+        const btnClose = interfaceSuccessMount.querySelector("#ismClose");
+        const btnOk = interfaceSuccessMount.querySelector("#ismUnderstand");
+        const btnApply = interfaceSuccessMount.querySelector('#ismApplyRules');
+        if (btnApply) {
+          const applyIface = iface;
+          const applyPort = port;
+          btnApply.addEventListener('click', async () => {
+            if (!applyPort || !applyIface) { showToast('Missing interface or port', false); return; }
+            if (btnApply.getAttribute('data-busy') === '1') return;
+            const orig = btnApply.textContent;
+            btnApply.setAttribute('data-busy','1');
+            btnApply.textContent = 'Applying...';
+            btnApply.disabled = true;
+            try {
+              await fetchJSON(`${apiBase}/shell/port/${encodeURIComponent(applyPort)}`, { method:'POST', headers: headers() });
+              await fetchJSON(`${apiBase}/shell/route/${encodeURIComponent(applyIface)}`, { method:'POST', headers: headers() });
+              btnApply.textContent = 'Applied';
+              showToast('Rules applied');
+              setTimeout(()=>{ btnApply.textContent = orig; btnApply.disabled=false; btnApply.removeAttribute('data-busy'); }, 2200);
+            } catch (e) {
+              btnApply.textContent = 'Failed';
+              showToast(e.message || 'Apply failed', false);
+              setTimeout(()=>{ btnApply.textContent = orig; btnApply.disabled=false; btnApply.removeAttribute('data-busy'); }, 2500);
+            }
+          });
+        }
+        // Copy button handler (event delegation for this modal instance)
+        interfaceSuccessMount.querySelectorAll('.pg-copy-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const targetId = btn.getAttribute('data-target');
+            const codeEl = targetId ? interfaceSuccessMount.querySelector(`#${CSS.escape(targetId)}`) : null;
+            const text = codeEl ? codeEl.innerText : '';
+            if (!text) return;
+            const copyText = async (t) => {
+              try {
+                if (navigator.clipboard && window.isSecureContext) {
+                  await navigator.clipboard.writeText(t);
+                } else {
+                  const ta = document.createElement('textarea');
+                  ta.value = t;
+                  ta.style.position='fixed';
+                  ta.style.top='-2000px';
+                  document.body.appendChild(ta);
+                  ta.select();
+                  document.execCommand('copy');
+                  ta.remove();
+                }
+                btn.classList.add('copied');
+                const original = btn.textContent;
+                btn.textContent = 'Copied';
+                setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 1500);
+              } catch (_) {
+                const original = btn.textContent;
+                btn.textContent = 'Failed';
+                setTimeout(() => { btn.textContent = original; }, 1500);
+              }
+            };
+            copyText(text);
+          });
+        });
+        function close() {
+          interfaceSuccessMount.style.display = "none";
+          interfaceSuccessMount.innerHTML = "";
+        }
+        btnClose.onclick = close;
+        btnOk.onclick = close;
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
         });
       }
     </script>
