@@ -691,6 +691,25 @@
         transform: translateY(0);
         pointer-events: auto;
       }
+      /* Settings modal styles */
+      .settings-modal { background:#0f181f; border:1px solid #22323f; border-radius:22px; width:720px; max-width:95%; display:flex; flex-direction:row; gap:0; min-height:420px; max-height:85vh; overflow:hidden; position:relative; box-shadow:0 18px 48px -20px #000, 0 0 0 1px #18242e inset; }
+      .settings-left { width:200px; background:#101d27; border-right:1px solid #1f2c38; display:flex; flex-direction:column; padding:24px 0 8px; gap:4px; }
+      .settings-left h4 { margin:0 18px 10px; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:#6fa8dc; }
+      .settings-nav { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+      .settings-nav li { cursor:pointer; padding:10px 18px; font-size:13px; color:#cfd8dc; border-left:3px solid transparent; transition:background .25s, border-color .25s; }
+      .settings-nav li:hover { background:#162633; }
+      .settings-nav li.active { background:#1d2c38; border-color:#335d7a; color:#fff; }
+      .settings-content { flex:1; display:flex; flex-direction:column; padding:30px 34px 34px; overflow-y:auto; gap:24px; }
+      .settings-content h3 { margin:0; font-size:20px; letter-spacing:.5px; }
+      .settings-close-btn { position:absolute; top:10px; right:10px; background:#1d2a34; border:1px solid #2a3a48; color:#9fb3bf; width:36px; height:36px; border-radius:10px; font-size:18px; font-weight:600; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .settings-close-btn:hover { background:#27455e; color:#fff; }
+      .settings-form { display:flex; flex-direction:column; gap:18px; max-width:420px; }
+      .settings-field { display:flex; flex-direction:column; gap:6px; }
+      .settings-field label { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#6fa8dc; }
+      .settings-field input { background:#132028; border:1px solid #243541; color:#d9e5ec; padding:12px 14px; border-radius:10px; font-size:14px; }
+      .settings-field input:focus { outline:2px solid #335d7a; outline-offset:1px; }
+      #cpFeedback { font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word; }
+      @media (max-width:760px){ .settings-modal{ flex-direction:column; width:100%; } .settings-left{ width:100%; flex-direction:row; overflow-x:auto; border-right:none; border-bottom:1px solid #1f2c38; padding:14px 10px; } .settings-nav{ flex-direction:row; } .settings-nav li{ border-left:none; border-bottom:3px solid transparent; } .settings-nav li.active{ border-bottom-color:#335d7a; } }
   /* Copy button styling for interface success modal */
   .pg-copy-wrap { position: relative; }
   .pg-copy-btn { position:absolute; top:4px; right:6px; background:#1d2a34; border:1px solid #2a3a48; color:#cfd8dc; font-size:11px; padding:3px 8px 4px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; line-height:1; }
@@ -719,6 +738,7 @@
           id="current-interface-label"
           style="font-size: 12px; color: #90a4ae"
         ></span>
+        <button id="btnOpenSettings" class="cog-btn" title="Settings">Settings</button>
         <a class="logout" href="/logout">Logout</a>
       </div>
     </div>
@@ -932,6 +952,7 @@
     <div id="deleteInterfaceModal" style="display: none"></div>
     <div id="logoutModal" style="display: none"></div>
   <div id="interfaceSuccessModal" style="display:none"></div>
+    <div id="settingsModal" style="display:none"></div>
     <script>
       // Backend proxy: all API calls go through /proxy so we avoid exposing raw API & token
       const apiBase = '/proxy';
@@ -2883,6 +2904,64 @@
 
       // Reusable Interface Success / Guidance Modal
       const interfaceSuccessMount = document.getElementById("interfaceSuccessModal");
+      const settingsModalMount = document.getElementById('settingsModal');
+      const btnOpenSettings = document.getElementById('btnOpenSettings');
+      function buildSettingsModal(activeCat = 'password') {
+        return `\n<div class=\"peer-modal-overlay\">\n  <div class=\"settings-modal\" role=\"dialog\" aria-modal=\"true\">\n    <button class=\"settings-close-btn\" id=\"settingsClose\" aria-label=\"Close\">×</button>\n    <div class=\"settings-left\">\n      <h4>Settings</h4>\n      <ul class=\"settings-nav\">\n        <li data-cat=\"password\" class=\"${activeCat==='password'?'active':''}\">Change Password</li>\n      </ul>\n    </div>\n    <div class=\"settings-content\" id=\"settingsContent\">\n      ${renderSettingContent(activeCat)}\n    </div>\n  </div>\n</div>`;
+      }
+      function renderSettingContent(cat){
+        if(cat==='password'){
+          return `<div id=\"passwordSetting\">\n  <h3>Change Password</h3>\n  <p style=\"margin:0;font-size:13px;color:#90a4ae;line-height:1.5;\">Update the administrative password. After changing, sessions may require re-authentication.</p>\n  <form id=\"cpForm\" class=\"settings-form\" autocomplete=\"off\">\n    <div class=\"settings-field\">\n      <label for=\"cpOld\">Current Password</label>\n      <input id=\"cpOld\" name=\"old_password\" type=\"password\" required autocomplete=\"current-password\" />\n    </div>\n    <div class=\"settings-field\">\n      <label for=\"cpNew1\">New Password</label>\n      <input id=\"cpNew1\" name=\"new_password1\" type=\"password\" required autocomplete=\"new-password\" />\n    </div>\n    <div class=\"settings-field\">\n      <label for=\"cpNew2\">Confirm New Password</label>\n      <input id=\"cpNew2\" name=\"new_password2\" type=\"password\" required autocomplete=\"new-password\" />\n    </div>\n    <div id=\"cpFeedback\"></div>\n    <div style=\"display:flex; gap:12px; justify-content:flex-end;\">\n      <button type=\"button\" id=\"cpCancel\" class=\"btn-danger btn-press\">Cancel</button>\n      <button type=\"submit\" id=\"cpSubmit\" class=\"btn-glow\">Change</button>\n    </div>\n  </form>\n</div>`;
+        }
+        return `<div><h3>Unknown</h3><p style=\"font-size:13px;color:#90a4ae;\">Category not found.</p></div>`;
+      }
+      function openSettingsModal(cat='password'){
+        if(!settingsModalMount) return;
+        settingsModalMount.innerHTML = buildSettingsModal(cat);
+        settingsModalMount.style.display='block';
+        const overlay = settingsModalMount.querySelector('.peer-modal-overlay');
+        const closeBtn = settingsModalMount.querySelector('#settingsClose');
+        const navItems = settingsModalMount.querySelectorAll('.settings-nav li');
+        const content = settingsModalMount.querySelector('#settingsContent');
+        function close(){ settingsModalMount.style.display='none'; settingsModalMount.innerHTML=''; }
+        closeBtn.onclick = close;
+        overlay.addEventListener('click', e => { if(e.target===overlay) close(); });
+        navItems.forEach(li => li.addEventListener('click', () => { navItems.forEach(n=>n.classList.remove('active')); li.classList.add('active'); const c = li.getAttribute('data-cat'); content.innerHTML = renderSettingContent(c); wirePasswordForm(); }));
+        wirePasswordForm();
+      }
+      function wirePasswordForm(){
+        const form = settingsModalMount.querySelector('#cpForm');
+        if(!form) return;
+        const oldEl = form.querySelector('#cpOld');
+        const n1El = form.querySelector('#cpNew1');
+        const n2El = form.querySelector('#cpNew2');
+        const feedback = form.querySelector('#cpFeedback');
+        const cancelBtn = form.querySelector('#cpCancel');
+        const submitBtn = form.querySelector('#cpSubmit');
+        function setFeedback(msg, ok=true){ if(feedback){ feedback.style.color = ok ? '#9cf0b7' : '#ff6b6b'; feedback.textContent = msg; } }
+        cancelBtn.onclick = () => { settingsModalMount.style.display='none'; settingsModalMount.innerHTML=''; };
+        form.addEventListener('submit', async e => {
+          e.preventDefault();
+          if(!oldEl.value){ setFeedback('Current password required', false); return; }
+          if(!n1El.value || !n2El.value){ setFeedback('New password fields required', false); return; }
+          if(n1El.value !== n2El.value){ setFeedback('New passwords do not match', false); return; }
+          if(n1El.value.length < 1){ setFeedback('Password too short', false); return; }
+          setFeedback('Changing...', true);
+          submitBtn.disabled = true; const orig = submitBtn.textContent; submitBtn.textContent='Working...';
+          try {
+            const res = await fetch(`${apiBase}/change-password`, { method:'POST', headers:headers(), body: JSON.stringify({ old_password: oldEl.value, new_password: n1El.value }) });
+            let data = {}; try { data = await res.json(); } catch(_) {}
+            if(!res.ok) throw new Error(data.detail || res.statusText);
+            setFeedback('Password changed successfully');
+            showToast('Password changed');
+            setTimeout(()=>{ settingsModalMount.style.display='none'; settingsModalMount.innerHTML=''; }, 1200);
+          } catch(err){
+            setFeedback(err.message || 'Change failed', false);
+            showToast(err.message || 'Change failed', false);
+          } finally { submitBtn.disabled=false; submitBtn.textContent=orig; }
+        });
+      }
+      if(btnOpenSettings) btnOpenSettings.addEventListener('click', ()=> openSettingsModal('password'));
       function buildInterfaceSuccessModal(kind, iface, port) {
         const heading =
           kind === "edited"
