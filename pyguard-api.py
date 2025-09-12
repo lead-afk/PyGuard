@@ -521,18 +521,28 @@ def api_validate_interface(req: ValidateInterface, _=Depends(require_jwt)):
 def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jwt)):
     # Apply each provided field using CLI core update_config semantics
 
+    something_changed = False
+
     if req.port is not None and req.port != req.old_port:
         update_config(interface, "port", "port", str(req.port))
+        something_changed = True
     if req.dns is not None and req.dns != req.old_dns:
         update_config(interface, "dns", "dns", req.dns)
+        something_changed = True
     if req.public_ip is not None and req.public_ip != req.old_public_ip:
         update_config(interface, "public-ip", "public-ip", req.public_ip)
+        something_changed = True
     if req.network is not None and req.network != req.old_network:
         update_config(interface, "network", "network", req.network)
+        something_changed = True
+
 
     if req.name is not None and interface != req.name:
         rename_interface(interface, req.name)
         interface = req.name
+        something_changed = True
+
+
 
     d = load_data(interface)
     if not d.get("server").get("private_key"):
@@ -551,7 +561,7 @@ def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jw
         "active": is_interface_active(interface),
     }
     print("Successful initialization of interface:", interface)
-    return {"interface": interface, "interfaces": data, "new_data": resp}
+    return {"interface": interface, "interfaces": data, "new_data": resp, "something_changed": something_changed}
 
 
 @app.get("/interfaces/{interface}/next_available")
@@ -633,6 +643,38 @@ def _create_peer(interface: str, req: AddPeerReq):
         raise HTTPException(status_code=500, detail="Failed to add peer")
     peers_obj = get_peers_info(interface)
     return peers_obj
+
+@app.post("/shell/port/{port}", status_code=201)
+def api_allow_port(port: str, _=Depends(require_jwt)):
+
+    settings = load_settings()
+    if not settings.get("allow_command_apply"):
+        raise HTTPException(status_code=403, detail="Command application is not allowed, enable it in settings")
+
+    ensure_root()
+
+    if not command_exists("ufw"):
+        raise HTTPException(status_code=400, detail="ufw command not found")
+
+    subprocess.run(["ufw", "allow", port], check=True)
+
+    return {"port": port}
+
+@app.post("/shell/route/{interface}", status_code=201)
+def api_allow_route(interface: str, _=Depends(require_jwt)):
+    
+    settings = load_settings()
+    if not settings.get("allow_command_apply"):
+        raise HTTPException(status_code=403, detail="Command application is not allowed, enable it in settings")
+    
+    ensure_root()
+
+    if not command_exists("ufw"):
+        raise HTTPException(status_code=400, detail="ufw command not found")
+
+    subprocess.run(["ufw", "route", "allow", "in", "on", interface, "out", "on", interface], check=True)
+
+    return {"interface": interface}
 
 
 @app.post("/interfaces/{interface}/peers", status_code=201)

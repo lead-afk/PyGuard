@@ -8,12 +8,14 @@ from pathlib import Path
 import shutil
 import re
 import psutil
+from enum import Enum
 
 # Constants / Paths
 CONFIG_DIR = "/etc/wireguard"  # Actual WireGuard runtime configs generated
 BASE_DATA_DIR = (
     "/etc/pyguard"  # PyGuard state (per-interface JSON now named <iface>.conf)
 )
+SETTINGS_FILE = os.path.join(BASE_DATA_DIR, "settings")
 DEFAULT_INTERFACE = "wg0"  # Only used as a default when creating new data
 DEFAULT_PORT = 51820
 DEFAULT_NETWORK = "10.0.0.0/24"
@@ -46,6 +48,44 @@ def data_path(interface: str) -> str:
     """
     return f"{BASE_DATA_DIR}/{interface}.conf"
 
+class Settings(Enum):
+    allow_command_apply = False # Allow the api to apply ufw rules
+
+def load_settings():
+    """Load settings from the configuration file."""
+    settings = {}
+    for setting in Settings:
+        settings.setdefault(setting.name, setting.value)
+
+    if not os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "w") as f:
+            for key, value in settings.items():
+                f.write(f"{key}={value}\n")
+        
+        return settings
+
+    with open(SETTINGS_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().lower()
+                if value in ("true", "1", "yes", "on"):
+                    value = True
+                elif value in ("false", "0", "no", "off"):
+                    value = False
+                else:
+                    try:
+                        value = Settings[key]
+                    except KeyError:
+                        pass
+
+                settings[key] = value
+
+    return settings
 
 def ensure_root():
     """Exit if not root on POSIX systems (WireGuard + file permissions require root).
@@ -527,7 +567,9 @@ def save_data(interface: str, data: dict):
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
     except Exception as e:
         print(f"Error saving data for {interface}: {e}")
-        sys.exit(1)
+        print("Data not saved.")
+        print(data)
+        raise Exception("Data not saved.")
 
 
 def delete_interface(interface: str):
@@ -644,7 +686,7 @@ def get_next_ip(interface: str, custom_network: str = None):
             network = ipaddress.ip_network(custom_network)
     except ValueError as e:
         print(f"Error: Invalid network: {e}")
-        sys.exit(1)
+        raise Exception(f"Invalid network: {e}")
 
     used_ips = [network.hosts().__next__().exploded]  # Start with server IP
 
@@ -655,8 +697,7 @@ def get_next_ip(interface: str, custom_network: str = None):
         if str(ip) not in used_ips:
             return str(ip)
 
-    print("Error: No available IPs in the network")
-    sys.exit(1)
+    raise Exception("No available IPs in the network")
 
 
 def get_used_ip_ranges():
@@ -808,14 +849,14 @@ def init_server(
 
     if not ok:
         print(f"Error: {meta['error']}")
-        sys.exit(1)
+        print(f"Failed to validate new interface, due to {meta['error']}")
+        raise Exception(meta['error'])
 
     if not public_ip:
         public_ip = get_public_ip()
 
     if any(c.isspace() for c in interface):
-        print("Error: Invalid interface name")
-        sys.exit(1)
+        raise Exception("Invalid interface name")
 
     data = load_data(interface)
 
@@ -895,12 +936,17 @@ def stop_wireguard(interface: str):
         SystemExit: If the interface cannot be stopped
     """
     ensure_root()
+    if not command_exists("wg-quick"):
+        print("wg-quick not found (WireGuard required)")
+        return
+    if not is_interface_active(interface):
+        return
     try:
         subprocess.run(["wg-quick", "down", interface], check=True)
         print(f"Stopped interface: {interface}")
     except subprocess.CalledProcessError as e:
         print(f"Error stopping: {e}")
-        sys.exit(1)
+        raise Exception(f"Failed stopping interface {interface}: {e}")
 
 
 def disable_service(interface: str):
@@ -1386,8 +1432,7 @@ def generate_config(
             print(f"Restarted active interface '{interface}'")
     except subprocess.CalledProcessError as e:
         print(f"Error restarting interface '{interface}': {e}")
-        sys.exit(1)
-
+        raise Exception(f"Failed restarting interface {interface}: {e}")
 
 def show_server_config(
     interface: str, as_json: bool = False, print_output: bool = True
@@ -1700,7 +1745,7 @@ def start_wireguard(interface: str):
         print(f"Started interface: {interface}")
     except subprocess.CalledProcessError as e:
         print(f"Error starting: {e}")
-        sys.exit(1)
+        raise Exception(f"Failed starting interface {interface}: {e}")
 
 
 def add_custom_command(interface: str, direction: str, command: str):
