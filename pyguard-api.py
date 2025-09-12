@@ -642,6 +642,7 @@ def api_validate_peer(interface: str, body: ValidatePeerReq, _=Depends(require_j
     except HTTPException:
         raise
     except Exception as e:
+        print("Error during peer 11111111111111111111 validation:", e)
         raise HTTPException(status_code=500, detail=f"validation failed: {e}")
     if not ok:
         # meta contains {'error': ...}
