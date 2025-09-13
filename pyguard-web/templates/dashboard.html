@@ -278,7 +278,9 @@
         width: 500px;
       }
       /* Explicit hidden helper (legacy calls) */
-      .peer-detail-panel.hidden { display:none !important; }
+      .peer-detail-panel.hidden {
+        display: none !important;
+      }
       /* Compact island tweaks: move interface actions above stats and ensure layout fits tighter */
       .island.expanded:not(.peer-open) .iface-meta-card {
         position: relative;
@@ -308,8 +310,8 @@
         flex-direction: column;
         gap: 10px;
         font-size: 12px;
-  /* Ensure consistent right spacing so inputs don't butt against the island edge */
-  padding-right: 12px; /* match dual-traffic grid gap */
+        /* Ensure consistent right spacing so inputs don't butt against the island edge */
+        padding-right: 12px; /* match dual-traffic grid gap */
       }
       .peer-field {
         display: flex;
@@ -334,7 +336,7 @@
         resize: vertical;
         font-family: monospace;
         letter-spacing: 0.4px;
-  box-sizing: border-box; /* keep consistent right margin within container */
+        box-sizing: border-box; /* keep consistent right margin within container */
       }
       /* Dual traffic fields (force grid to avoid overlap) */
       .peer-field.dual-traffic {
@@ -702,32 +704,201 @@
         pointer-events: auto;
       }
       /* Settings modal styles */
-      .settings-modal { background:#0f181f; border:1px solid #22323f; border-radius:22px; width:720px; max-width:95%; display:flex; flex-direction:row; gap:0; min-height:420px; max-height:85vh; overflow:hidden; position:relative; box-shadow:0 18px 48px -20px #000, 0 0 0 1px #18242e inset; }
-      .settings-left { width:200px; background:#101d27; border-right:1px solid #1f2c38; display:flex; flex-direction:column; padding:24px 0 8px; gap:4px; }
-      .settings-left h4 { margin:0 18px 10px; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:#6fa8dc; }
-      .settings-nav { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
-      .settings-nav li { cursor:pointer; padding:10px 18px; font-size:13px; color:#cfd8dc; border-left:3px solid transparent; transition:background .25s, border-color .25s; }
-      .settings-nav li:hover { background:#162633; }
-      .settings-nav li.active { background:#1d2c38; border-color:#335d7a; color:#fff; }
-      .settings-content { flex:1; display:flex; flex-direction:column; padding:30px 34px 34px; overflow-y:auto; gap:24px; }
-      .settings-content h3 { margin:0; font-size:20px; letter-spacing:.5px; }
-      .settings-close-btn { position:absolute; top:10px; right:10px; background:#1d2a34; border:1px solid #2a3a48; color:#9fb3bf; width:36px; height:36px; border-radius:10px; font-size:18px; font-weight:600; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-      .settings-close-btn:hover { background:#27455e; color:#fff; }
-      .settings-form { display:flex; flex-direction:column; gap:18px; max-width:420px; }
-      .settings-field { display:flex; flex-direction:column; gap:6px; }
-      .settings-field label { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#6fa8dc; }
-      .settings-field input { background:#132028; border:1px solid #243541; color:#d9e5ec; padding:12px 14px; border-radius:10px; font-size:14px; }
-      .settings-field input:focus { outline:2px solid #335d7a; outline-offset:1px; }
-      #cpFeedback { font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word; }
-      @media (max-width:760px){ .settings-modal{ flex-direction:column; width:100%; } .settings-left{ width:100%; flex-direction:row; overflow-x:auto; border-right:none; border-bottom:1px solid #1f2c38; padding:14px 10px; } .settings-nav{ flex-direction:row; } .settings-nav li{ border-left:none; border-bottom:3px solid transparent; } .settings-nav li.active{ border-bottom-color:#335d7a; } }
-  /* Copy button styling for interface success modal */
-  .pg-copy-wrap { position: relative; }
-  .pg-copy-btn { position:absolute; top:4px; right:6px; background:#1d2a34; border:1px solid #2a3a48; color:#cfd8dc; font-size:11px; padding:3px 8px 4px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; line-height:1; }
-  .pg-copy-btn:hover { background:#27455e; color:#fff; }
-  .pg-copy-btn.copied { background:#113820; border-color:#1e6b39; color:#9cf0b7; }
-  .pg-code-block { position:relative; margin:6px 0 4px; }
-  .pg-code-block code { display:block; padding:6px 8px; background:#132028; border:1px solid #22323f; border-radius:6px; font-size:12px; white-space:pre; overflow-x:auto; }
-  .pg-fixed-btn { min-width:120px; }
+      .settings-modal {
+        background: #0f181f;
+        border: 1px solid #22323f;
+        border-radius: 22px;
+        width: 720px;
+        max-width: 95%;
+        display: flex;
+        flex-direction: row;
+        gap: 0;
+        min-height: 420px;
+        max-height: 85vh;
+        overflow: hidden;
+        position: relative;
+        box-shadow: 0 18px 48px -20px #000, 0 0 0 1px #18242e inset;
+      }
+      .settings-left {
+        width: 200px;
+        background: #101d27;
+        border-right: 1px solid #1f2c38;
+        display: flex;
+        flex-direction: column;
+        padding: 24px 0 8px;
+        gap: 4px;
+      }
+      .settings-left h4 {
+        margin: 0 18px 10px;
+        font-size: 12px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #6fa8dc;
+      }
+      .settings-nav {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .settings-nav li {
+        cursor: pointer;
+        padding: 10px 18px;
+        font-size: 13px;
+        color: #cfd8dc;
+        border-left: 3px solid transparent;
+        transition: background 0.25s, border-color 0.25s;
+      }
+      .settings-nav li:hover {
+        background: #162633;
+      }
+      .settings-nav li.active {
+        background: #1d2c38;
+        border-color: #335d7a;
+        color: #fff;
+      }
+      .settings-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 30px 34px 34px;
+        overflow-y: auto;
+        gap: 24px;
+      }
+      .settings-content h3 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: 0.5px;
+      }
+      .settings-close-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: #1d2a34;
+        border: 1px solid #2a3a48;
+        color: #9fb3bf;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        font-size: 18px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .settings-close-btn:hover {
+        background: #27455e;
+        color: #fff;
+      }
+      .settings-form {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        max-width: 420px;
+      }
+      .settings-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .settings-field label {
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #6fa8dc;
+      }
+      .settings-field input {
+        background: #132028;
+        border: 1px solid #243541;
+        color: #d9e5ec;
+        padding: 12px 14px;
+        border-radius: 10px;
+        font-size: 14px;
+      }
+      .settings-field input:focus {
+        outline: 2px solid #335d7a;
+        outline-offset: 1px;
+      }
+      #cpFeedback {
+        font-size: 12px;
+        min-height: 18px;
+        color: #a0b4c0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      @media (max-width: 760px) {
+        .settings-modal {
+          flex-direction: column;
+          width: 100%;
+        }
+        .settings-left {
+          width: 100%;
+          flex-direction: row;
+          overflow-x: auto;
+          border-right: none;
+          border-bottom: 1px solid #1f2c38;
+          padding: 14px 10px;
+        }
+        .settings-nav {
+          flex-direction: row;
+        }
+        .settings-nav li {
+          border-left: none;
+          border-bottom: 3px solid transparent;
+        }
+        .settings-nav li.active {
+          border-bottom-color: #335d7a;
+        }
+      }
+      /* Copy button styling for interface success modal */
+      .pg-copy-wrap {
+        position: relative;
+      }
+      .pg-copy-btn {
+        position: absolute;
+        top: 4px;
+        right: 6px;
+        background: #1d2a34;
+        border: 1px solid #2a3a48;
+        color: #cfd8dc;
+        font-size: 11px;
+        padding: 3px 8px 4px;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        line-height: 1;
+      }
+      .pg-copy-btn:hover {
+        background: #27455e;
+        color: #fff;
+      }
+      .pg-copy-btn.copied {
+        background: #113820;
+        border-color: #1e6b39;
+        color: #9cf0b7;
+      }
+      .pg-code-block {
+        position: relative;
+        margin: 6px 0 4px;
+      }
+      .pg-code-block code {
+        display: block;
+        padding: 6px 8px;
+        background: #132028;
+        border: 1px solid #22323f;
+        border-radius: 6px;
+        font-size: 12px;
+        white-space: pre;
+        overflow-x: auto;
+      }
+      .pg-fixed-btn {
+        min-width: 120px;
+      }
     </style>
   </head>
   <body>
@@ -748,7 +919,9 @@
           id="current-interface-label"
           style="font-size: 12px; color: #90a4ae"
         ></span>
-        <button id="btnOpenSettings" class="cog-btn" title="Settings">Settings</button>
+        <button id="btnOpenSettings" class="cog-btn" title="Settings">
+          Settings
+        </button>
         <a class="logout" href="/logout">Logout</a>
       </div>
     </div>
@@ -923,7 +1096,8 @@
                         <label>IP</label><input id="detailIP" readonly />
                       </div>
                       <div class="traffic-col">
-                        <label>Endpoint</label><input id="detailEndpoint" readonly />
+                        <label>Endpoint</label
+                        ><input id="detailEndpoint" readonly />
                       </div>
                     </div>
                     <div class="peer-field dual-traffic">
@@ -961,12 +1135,15 @@
     <div id="deletePeerModal" style="display: none"></div>
     <div id="deleteInterfaceModal" style="display: none"></div>
     <div id="logoutModal" style="display: none"></div>
-  <div id="interfaceSuccessModal" style="display:none"></div>
-    <div id="settingsModal" style="display:none"></div>
+    <div id="interfaceSuccessModal" style="display: none"></div>
+    <div id="settingsModal" style="display: none"></div>
     <script>
       // Backend proxy: all API calls go through /proxy so we avoid exposing raw API & token
-      const apiBase = '/proxy';
-      console.log("[PyGuard] Dashboard script start (proxy mode). apiBase=", apiBase);
+      const apiBase = "/proxy";
+      console.log(
+        "[PyGuard] Dashboard script start (proxy mode). apiBase=",
+        apiBase
+      );
       const headers = () => ({
         "Content-Type": "application/json",
       });
@@ -985,17 +1162,17 @@
       // Updated hide/show helpers: rely on .details-region.peer-open to control sizing so when hidden it occupies zero space.
       function hidePeerDetailPanel() {
         if (!peerDetailPanel) return;
-        peerDetailPanel.classList.add('hidden');
-        const region = islandEl.querySelector('.details-region');
-        if (region) region.classList.remove('peer-open');
-        islandEl.classList.remove('peer-open');
+        peerDetailPanel.classList.add("hidden");
+        const region = islandEl.querySelector(".details-region");
+        if (region) region.classList.remove("peer-open");
+        islandEl.classList.remove("peer-open");
       }
       function showPeerDetailPanel() {
         if (!peerDetailPanel) return;
-        peerDetailPanel.classList.remove('hidden');
-        const region = islandEl.querySelector('.details-region');
-        if (region) region.classList.add('peer-open');
-        islandEl.classList.add('peer-open');
+        peerDetailPanel.classList.remove("hidden");
+        const region = islandEl.querySelector(".details-region");
+        if (region) region.classList.add("peer-open");
+        islandEl.classList.add("peer-open");
       }
       const editInterfaceModalMount =
         document.getElementById("editInterfaceModal");
@@ -1009,7 +1186,7 @@
       const btnQrPeer = document.getElementById("btnQrPeer");
       const detailPublicKey = document.getElementById("detailPublicKey");
       const detailIP = document.getElementById("detailIP");
-  const detailEndpoint = document.getElementById("detailEndpoint");
+      const detailEndpoint = document.getElementById("detailEndpoint");
       const detailDownload = document.getElementById("detailDownload");
       const detailUpload = document.getElementById("detailUpload");
       const detailHandshake = document.getElementById("detailHandshake");
@@ -1356,7 +1533,9 @@
         // Highlight only the exact selected row
         document
           .querySelectorAll(".peer-row")
-          .forEach((r) => r.classList.toggle("active", r.dataset.pubkey === pub));
+          .forEach((r) =>
+            r.classList.toggle("active", r.dataset.pubkey === pub)
+          );
         if (emptyState) emptyState.style.display = "none";
         if (peerEditor) peerEditor.style.display = "block";
         if (peerEditorTitle) peerEditorTitle.textContent = `Peer: ${p.name}`;
@@ -1972,7 +2151,7 @@
           ipPrefill || ""
         }" placeholder="Auto if blank"/>\n      </div>\n      <div class="pm-field">\n        <label for="pmAllowed">Allowed IPs</label>\n        <input id="pmAllowed" name="allowed_ips" value="${allowedPrefill}" placeholder="e.g. ${
           allowedPrefill || "0.0.0.0/0"
-  }"/>\n      </div>\n      <div id="pmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="pmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="pmValidate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+        }"/>\n      </div>\n      <div id="pmFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="pmCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="pmValidate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`;
       }
       async function ensureServerNetwork() {
         // If we didn't capture the network during interface load, fetch it now.
@@ -2184,8 +2363,9 @@
         const portInput = editInterfaceModalMount.querySelector("#eimPort");
         const networkInput =
           editInterfaceModalMount.querySelector("#eimNetwork");
-  const publicIpInput = editInterfaceModalMount.querySelector("#eimPublicIP");
-  const dnsInput = editInterfaceModalMount.querySelector("#eimDNS");
+        const publicIpInput =
+          editInterfaceModalMount.querySelector("#eimPublicIP");
+        const dnsInput = editInterfaceModalMount.querySelector("#eimDNS");
         const ignoreChk = editInterfaceModalMount.querySelector("#eimIgnore");
         function close() {
           editInterfaceModalMount.style.display = "none";
@@ -2347,7 +2527,8 @@
                 ifaceActivePill.textContent = isActive ? "active" : "inactive";
               }
               // stats
-              const peerCount = nd.peer_count ?? (nd.peers ? Object.keys(nd.peers).length : 0);
+              const peerCount =
+                nd.peer_count ?? (nd.peers ? Object.keys(nd.peers).length : 0);
               const stats = [
                 { label: "Network", value: s.network || "-" },
                 { label: "relay ip", value: s.ip || "—" },
@@ -2387,26 +2568,29 @@
               renderPeerList();
               // Keep island expanded (no peer open) after server update
               islandEl.classList.add("expanded");
-              islandEl.querySelector(".details-region")?.classList.remove("peer-open");
+              islandEl
+                .querySelector(".details-region")
+                ?.classList.remove("peer-open");
               hidePeerDetailPanel();
               emptyState.style.display = "block";
               // Determine if backend reports an actual change
               const changed = !!updPayload?.something_changed;
-              const applyBtn = form.querySelector('#eimValidate');
+              const applyBtn = form.querySelector("#eimValidate");
               if (changed) {
                 // Close modal then show success + guidance
                 close();
-                showToast('Server updated');
-                const finalPort = currentServer?.port || s.port || updPayload?.port;
-                showInterfaceSuccess('edited', currentInterface, finalPort);
+                showToast("Server updated");
+                const finalPort =
+                  currentServer?.port || s.port || updPayload?.port;
+                showInterfaceSuccess("edited", currentInterface, finalPort);
               } else {
                 // Keep modal open; inform user nothing changed and reflect via button label
-                showToast('No changes detected');
-                feedback.style.color = '#a0b4c0';
-                feedback.textContent = 'No changes to apply.';
+                showToast("No changes detected");
+                feedback.style.color = "#a0b4c0";
+                feedback.textContent = "No changes to apply.";
                 if (applyBtn) {
                   const originalText = applyBtn.textContent;
-                  applyBtn.textContent = 'Nothing changed';
+                  applyBtn.textContent = "Nothing changed";
                   applyBtn.disabled = true;
                   // Revert after short delay so user can attempt edits
                   setTimeout(() => {
@@ -2418,7 +2602,9 @@
               }
             } catch (err) {
               feedback.style.color = "#ff6b6b";
-              feedback.textContent = `Update failed: ${err?.message || "error"}`;
+              feedback.textContent = `Update failed: ${
+                err?.message || "error"
+              }`;
             }
           } catch (err) {
             feedback.style.color = "#ff6b6b";
@@ -2885,9 +3071,9 @@
           .forEach((el) => el.classList.remove("active"));
         const detailsRegion = islandEl.querySelector(".details-region");
         if (detailsRegion) detailsRegion.classList.remove("peer-open");
-  islandEl.classList.remove("peer-open");
-  islandEl.classList.remove("expanded");
-  hidePeerDetailPanel();
+        islandEl.classList.remove("peer-open");
+        islandEl.classList.remove("expanded");
+        hidePeerDetailPanel();
         // Clear UI texts
         const ifaceTitleEl = document.getElementById("ifaceTitle");
         const ifaceMetaEl = document.getElementById("ifaceStats");
@@ -2936,7 +3122,7 @@
         });
         btnLogout.onclick = async () => {
           await fetch("/logout", { method: "POST" }).then(() => {
-              window.location.href = "/login";
+            window.location.href = "/login";
           });
         };
       }
@@ -2948,65 +3134,126 @@
       }
 
       // Reusable Interface Success / Guidance Modal
-      const interfaceSuccessMount = document.getElementById("interfaceSuccessModal");
-      const settingsModalMount = document.getElementById('settingsModal');
-      const btnOpenSettings = document.getElementById('btnOpenSettings');
-      function buildSettingsModal(activeCat = 'password') {
-        return `\n<div class=\"peer-modal-overlay\">\n  <div class=\"settings-modal\" role=\"dialog\" aria-modal=\"true\">\n    <button class=\"settings-close-btn\" id=\"settingsClose\" aria-label=\"Close\">×</button>\n    <div class=\"settings-left\">\n      <h4>Settings</h4>\n      <ul class=\"settings-nav\">\n        <li data-cat=\"password\" class=\"${activeCat==='password'?'active':''}\">Change Password</li>\n      </ul>\n    </div>\n    <div class=\"settings-content\" id=\"settingsContent\">\n      ${renderSettingContent(activeCat)}\n    </div>\n  </div>\n</div>`;
+      const interfaceSuccessMount = document.getElementById(
+        "interfaceSuccessModal"
+      );
+      const settingsModalMount = document.getElementById("settingsModal");
+      const btnOpenSettings = document.getElementById("btnOpenSettings");
+      function buildSettingsModal(activeCat = "password") {
+        return `\n<div class=\"peer-modal-overlay\">\n  <div class=\"settings-modal\" role=\"dialog\" aria-modal=\"true\">\n    <button class=\"settings-close-btn\" id=\"settingsClose\" aria-label=\"Close\">×</button>\n    <div class=\"settings-left\">\n      <h4>Settings</h4>\n      <ul class=\"settings-nav\">\n        <li data-cat=\"password\" class=\"${
+          activeCat === "password" ? "active" : ""
+        }\">Change Password</li>\n      </ul>\n    </div>\n    <div class=\"settings-content\" id=\"settingsContent\">\n      ${renderSettingContent(
+          activeCat
+        )}\n    </div>\n  </div>\n</div>`;
       }
-      function renderSettingContent(cat){
-        if(cat==='password'){
+      function renderSettingContent(cat) {
+        if (cat === "password") {
           return `<div id=\"passwordSetting\">\n  <h3>Change Password</h3>\n  <p style=\"margin:0;font-size:13px;color:#90a4ae;line-height:1.5;\">Update the administrative password. After changing, sessions may require re-authentication.</p>\n  <form id=\"cpForm\" class=\"settings-form\" autocomplete=\"off\">\n    <div class=\"settings-field\">\n      <label for=\"cpOld\">Current Password</label>\n      <input id=\"cpOld\" name=\"old_password\" type=\"password\" required autocomplete=\"current-password\" />\n    </div>\n    <div class=\"settings-field\">\n      <label for=\"cpNew1\">New Password</label>\n      <input id=\"cpNew1\" name=\"new_password1\" type=\"password\" required autocomplete=\"new-password\" />\n    </div>\n    <div class=\"settings-field\">\n      <label for=\"cpNew2\">Confirm New Password</label>\n      <input id=\"cpNew2\" name=\"new_password2\" type=\"password\" required autocomplete=\"new-password\" />\n    </div>\n    <div id=\"cpFeedback\"></div>\n    <div style=\"display:flex; gap:12px; justify-content:flex-end;\">\n      <button type=\"button\" id=\"cpCancel\" class=\"btn-danger btn-press\">Cancel</button>\n      <button type=\"submit\" id=\"cpSubmit\" class=\"btn-glow\">Change</button>\n    </div>\n  </form>\n</div>`;
         }
         return `<div><h3>Unknown</h3><p style=\"font-size:13px;color:#90a4ae;\">Category not found.</p></div>`;
       }
-      function openSettingsModal(cat='password'){
-        if(!settingsModalMount) return;
+      function openSettingsModal(cat = "password") {
+        if (!settingsModalMount) return;
         settingsModalMount.innerHTML = buildSettingsModal(cat);
-        settingsModalMount.style.display='block';
-        const overlay = settingsModalMount.querySelector('.peer-modal-overlay');
-        const closeBtn = settingsModalMount.querySelector('#settingsClose');
-        const navItems = settingsModalMount.querySelectorAll('.settings-nav li');
-        const content = settingsModalMount.querySelector('#settingsContent');
-        function close(){ settingsModalMount.style.display='none'; settingsModalMount.innerHTML=''; }
+        settingsModalMount.style.display = "block";
+        const overlay = settingsModalMount.querySelector(".peer-modal-overlay");
+        const closeBtn = settingsModalMount.querySelector("#settingsClose");
+        const navItems =
+          settingsModalMount.querySelectorAll(".settings-nav li");
+        const content = settingsModalMount.querySelector("#settingsContent");
+        function close() {
+          settingsModalMount.style.display = "none";
+          settingsModalMount.innerHTML = "";
+        }
         closeBtn.onclick = close;
-        overlay.addEventListener('click', e => { if(e.target===overlay) close(); });
-        navItems.forEach(li => li.addEventListener('click', () => { navItems.forEach(n=>n.classList.remove('active')); li.classList.add('active'); const c = li.getAttribute('data-cat'); content.innerHTML = renderSettingContent(c); wirePasswordForm(); }));
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        navItems.forEach((li) =>
+          li.addEventListener("click", () => {
+            navItems.forEach((n) => n.classList.remove("active"));
+            li.classList.add("active");
+            const c = li.getAttribute("data-cat");
+            content.innerHTML = renderSettingContent(c);
+            wirePasswordForm();
+          })
+        );
         wirePasswordForm();
       }
-      function wirePasswordForm(){
-        const form = settingsModalMount.querySelector('#cpForm');
-        if(!form) return;
-        const oldEl = form.querySelector('#cpOld');
-        const n1El = form.querySelector('#cpNew1');
-        const n2El = form.querySelector('#cpNew2');
-        const feedback = form.querySelector('#cpFeedback');
-        const cancelBtn = form.querySelector('#cpCancel');
-        const submitBtn = form.querySelector('#cpSubmit');
-        function setFeedback(msg, ok=true){ if(feedback){ feedback.style.color = ok ? '#9cf0b7' : '#ff6b6b'; feedback.textContent = msg; } }
-        cancelBtn.onclick = () => { settingsModalMount.style.display='none'; settingsModalMount.innerHTML=''; };
-        form.addEventListener('submit', async e => {
+      function wirePasswordForm() {
+        const form = settingsModalMount.querySelector("#cpForm");
+        if (!form) return;
+        const oldEl = form.querySelector("#cpOld");
+        const n1El = form.querySelector("#cpNew1");
+        const n2El = form.querySelector("#cpNew2");
+        const feedback = form.querySelector("#cpFeedback");
+        const cancelBtn = form.querySelector("#cpCancel");
+        const submitBtn = form.querySelector("#cpSubmit");
+        function setFeedback(msg, ok = true) {
+          if (feedback) {
+            feedback.style.color = ok ? "#9cf0b7" : "#ff6b6b";
+            feedback.textContent = msg;
+          }
+        }
+        cancelBtn.onclick = () => {
+          settingsModalMount.style.display = "none";
+          settingsModalMount.innerHTML = "";
+        };
+        form.addEventListener("submit", async (e) => {
           e.preventDefault();
-          if(!oldEl.value){ setFeedback('Current password required', false); return; }
-          if(!n1El.value || !n2El.value){ setFeedback('New password fields required', false); return; }
-          if(n1El.value !== n2El.value){ setFeedback('New passwords do not match', false); return; }
-          if(n1El.value.length < 1){ setFeedback('Password too short', false); return; }
-          setFeedback('Changing...', true);
-          submitBtn.disabled = true; const orig = submitBtn.textContent; submitBtn.textContent='Working...';
+          if (!oldEl.value) {
+            setFeedback("Current password required", false);
+            return;
+          }
+          if (!n1El.value || !n2El.value) {
+            setFeedback("New password fields required", false);
+            return;
+          }
+          if (n1El.value !== n2El.value) {
+            setFeedback("New passwords do not match", false);
+            return;
+          }
+          if (n1El.value.length < 1) {
+            setFeedback("Password too short", false);
+            return;
+          }
+          setFeedback("Changing...", true);
+          submitBtn.disabled = true;
+          const orig = submitBtn.textContent;
+          submitBtn.textContent = "Working...";
           try {
-            const res = await fetch(`${apiBase}/change-password`, { method:'POST', headers:headers(), body: JSON.stringify({ old_password: oldEl.value, new_password: n1El.value }) });
-            let data = {}; try { data = await res.json(); } catch(_) {}
-            if(!res.ok) throw new Error(data.detail || res.statusText);
-            setFeedback('Password changed successfully');
-            showToast('Password changed');
-            setTimeout(()=>{ settingsModalMount.style.display='none'; settingsModalMount.innerHTML=''; }, 1200);
-          } catch(err){
-            setFeedback(err.message || 'Change failed', false);
-            showToast(err.message || 'Change failed', false);
-          } finally { submitBtn.disabled=false; submitBtn.textContent=orig; }
+            const res = await fetch(`${apiBase}/change-password`, {
+              method: "POST",
+              headers: headers(),
+              body: JSON.stringify({
+                old_password: oldEl.value,
+                new_password: n1El.value,
+              }),
+            });
+            let data = {};
+            try {
+              data = await res.json();
+            } catch (_) {}
+            if (!res.ok) throw new Error(data.detail || res.statusText);
+            setFeedback("Password changed successfully");
+            showToast("Password changed");
+            setTimeout(() => {
+              settingsModalMount.style.display = "none";
+              settingsModalMount.innerHTML = "";
+            }, 1200);
+          } catch (err) {
+            setFeedback(err.message || "Change failed", false);
+            showToast(err.message || "Change failed", false);
+          } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = orig;
+          }
         });
       }
-      if(btnOpenSettings) btnOpenSettings.addEventListener('click', ()=> openSettingsModal('password'));
+      if (btnOpenSettings)
+        btnOpenSettings.addEventListener("click", () =>
+          openSettingsModal("password")
+        );
       function buildInterfaceSuccessModal(kind, iface, port) {
         const heading =
           kind === "edited"
@@ -3018,77 +3265,117 @@
         const i = iface || "<iface>";
         const fwCmd1 = `ufw allow ${p}/udp`;
         const fwCmd2 = `ufw route allow in on ${i} out on ${i}`;
-  const id1 = `pgc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-  const id2 = `pgc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-  const id3 = `pgc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`; // sysctl block
-  return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" style="max-width:640px;" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="ismClose" aria-label="Close">×</button>\n    <h3 style="margin-top:0;">${heading}</h3>\n    <div style="font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready. To ensure full connectivity and proper WireGuard operation, review the recommended system steps below.</div>\n      <ol style="margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;">\n        <li>To allow for WireGuard traffic port <b>${p}</b> must be open and publicly reachable end-to-end (host firewall, upstream router/NAT, cloud security group):<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id1}">Copy</button><code id="${id1}">${fwCmd1}</code></div>For peer-to-peer routing between clients:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id2}">Copy</button><code id="${id2}">${fwCmd2}</code></div><div style="margin-top:6px;font-size:11px;color:#90a4ae;">These commands plus external firewall/NAT rules ensure peers can reach the interface.</div></li>\n        <li>Enable packet forwarding system-wide:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id3}">Copy</button><code id="${id3}">sysctl -w net.ipv4.ip_forward=1\n# (optional IPv6)\nsysctl -w net.ipv6.conf.all.forwarding=1</code></div><span style="display:block;margin-top:4px;">Persist in /etc/sysctl.conf for reboot survival.</span></li>\n      </ol>\n    </div>\n    <div class="pm-actions" style="margin-top:18px;justify-content:flex-end;gap:10px;">\n      <button type="button" id="ismApplyRules" class="btn-glow pg-fixed-btn" style="background:#1f3a4d;">Apply Rules</button>\n      <button type="button" id="ismUnderstand" class="btn-glow">I Understand</button>\n    </div>\n  </div>\n</div>`;
+        const id1 = `pgc_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 7)}`;
+        const id2 = `pgc_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 7)}`;
+        const id3 = `pgc_${Date.now()}_${Math.random()
+          .toString(36)
+          .slice(2, 7)}`; // sysctl block
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" style="max-width:640px;" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="ismClose" aria-label="Close">×</button>\n    <h3 style="margin-top:0;">${heading}</h3>\n    <div style="font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready. To ensure full connectivity and proper WireGuard operation, review the recommended system steps below.</div>\n      <ol style="margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;">\n        <li>To allow for WireGuard traffic port <b>${p}</b> must be open and publicly reachable end-to-end (host firewall, upstream router/NAT, cloud security group):<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id1}">Copy</button><code id="${id1}">${fwCmd1}</code></div>For peer-to-peer routing between clients:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id2}">Copy</button><code id="${id2}">${fwCmd2}</code></div><div style="margin-top:6px;font-size:11px;color:#90a4ae;">These commands plus external firewall/NAT rules ensure peers can reach the interface.</div></li>\n        <li>Enable packet forwarding system-wide:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id3}">Copy</button><code id="${id3}">sysctl -w net.ipv4.ip_forward=1\n# (optional IPv6)\nsysctl -w net.ipv6.conf.all.forwarding=1</code></div><span style="display:block;margin-top:4px;">Persist in /etc/sysctl.conf for reboot survival.</span></li>\n      </ol>\n    </div>\n    <div class="pm-actions" style="margin-top:18px;justify-content:flex-end;gap:10px;">\n      <button type="button" id="ismApplyRules" class="btn-glow pg-fixed-btn" style="background:#1f3a4d;">Apply Rules</button>\n      <button type="button" id="ismUnderstand" class="btn-glow">I Understand</button>\n    </div>\n  </div>\n</div>`;
       }
       function showInterfaceSuccess(kind, iface, port) {
         if (!interfaceSuccessMount) return;
-        interfaceSuccessMount.innerHTML = buildInterfaceSuccessModal(kind, iface, port);
+        interfaceSuccessMount.innerHTML = buildInterfaceSuccessModal(
+          kind,
+          iface,
+          port
+        );
         interfaceSuccessMount.style.display = "block";
-        const overlay = interfaceSuccessMount.querySelector(".peer-modal-overlay");
+        const overlay = interfaceSuccessMount.querySelector(
+          ".peer-modal-overlay"
+        );
         const btnClose = interfaceSuccessMount.querySelector("#ismClose");
         const btnOk = interfaceSuccessMount.querySelector("#ismUnderstand");
-        const btnApply = interfaceSuccessMount.querySelector('#ismApplyRules');
+        const btnApply = interfaceSuccessMount.querySelector("#ismApplyRules");
         if (btnApply) {
           const applyIface = iface;
           const applyPort = port;
-          btnApply.addEventListener('click', async () => {
-            if (!applyPort || !applyIface) { showToast('Missing interface or port', false); return; }
-            if (btnApply.getAttribute('data-busy') === '1') return;
+          btnApply.addEventListener("click", async () => {
+            if (!applyPort || !applyIface) {
+              showToast("Missing interface or port", false);
+              return;
+            }
+            if (btnApply.getAttribute("data-busy") === "1") return;
             const orig = btnApply.textContent;
-            btnApply.setAttribute('data-busy','1');
-            btnApply.textContent = 'Applying...';
+            btnApply.setAttribute("data-busy", "1");
+            btnApply.textContent = "Applying...";
             btnApply.disabled = true;
             try {
-              await fetchJSON(`${apiBase}/shell/port/${encodeURIComponent(applyPort)}`, { method:'POST', headers: headers() });
-              await fetchJSON(`${apiBase}/shell/route/${encodeURIComponent(applyIface)}`, { method:'POST', headers: headers() });
-              btnApply.textContent = 'Applied';
-              showToast('Rules applied');
-              setTimeout(()=>{ btnApply.textContent = orig; btnApply.disabled=false; btnApply.removeAttribute('data-busy'); }, 2200);
+              await fetchJSON(
+                `${apiBase}/shell/port/${encodeURIComponent(applyPort)}`,
+                { method: "POST", headers: headers() }
+              );
+              await fetchJSON(
+                `${apiBase}/shell/route/${encodeURIComponent(applyIface)}`,
+                { method: "POST", headers: headers() }
+              );
+              btnApply.textContent = "Applied";
+              showToast("Rules applied");
+              setTimeout(() => {
+                btnApply.textContent = orig;
+                btnApply.disabled = false;
+                btnApply.removeAttribute("data-busy");
+              }, 2200);
             } catch (e) {
-              btnApply.textContent = 'Failed';
-              showToast(e.message || 'Apply failed', false);
-              setTimeout(()=>{ btnApply.textContent = orig; btnApply.disabled=false; btnApply.removeAttribute('data-busy'); }, 2500);
+              btnApply.textContent = "Failed";
+              showToast(e.message || "Apply failed", false);
+              setTimeout(() => {
+                btnApply.textContent = orig;
+                btnApply.disabled = false;
+                btnApply.removeAttribute("data-busy");
+              }, 2500);
             }
           });
         }
         // Copy button handler (event delegation for this modal instance)
-        interfaceSuccessMount.querySelectorAll('.pg-copy-btn').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const targetId = btn.getAttribute('data-target');
-            const codeEl = targetId ? interfaceSuccessMount.querySelector(`#${CSS.escape(targetId)}`) : null;
-            const text = codeEl ? codeEl.innerText : '';
-            if (!text) return;
-            const copyText = async (t) => {
-              try {
-                if (navigator.clipboard && window.isSecureContext) {
-                  await navigator.clipboard.writeText(t);
-                } else {
-                  const ta = document.createElement('textarea');
-                  ta.value = t;
-                  ta.style.position='fixed';
-                  ta.style.top='-2000px';
-                  document.body.appendChild(ta);
-                  ta.select();
-                  document.execCommand('copy');
-                  ta.remove();
+        interfaceSuccessMount
+          .querySelectorAll(".pg-copy-btn")
+          .forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const targetId = btn.getAttribute("data-target");
+              const codeEl = targetId
+                ? interfaceSuccessMount.querySelector(
+                    `#${CSS.escape(targetId)}`
+                  )
+                : null;
+              const text = codeEl ? codeEl.innerText : "";
+              if (!text) return;
+              const copyText = async (t) => {
+                try {
+                  if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(t);
+                  } else {
+                    const ta = document.createElement("textarea");
+                    ta.value = t;
+                    ta.style.position = "fixed";
+                    ta.style.top = "-2000px";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    ta.remove();
+                  }
+                  btn.classList.add("copied");
+                  const original = btn.textContent;
+                  btn.textContent = "Copied";
+                  setTimeout(() => {
+                    btn.textContent = original;
+                    btn.classList.remove("copied");
+                  }, 1500);
+                } catch (_) {
+                  const original = btn.textContent;
+                  btn.textContent = "Failed";
+                  setTimeout(() => {
+                    btn.textContent = original;
+                  }, 1500);
                 }
-                btn.classList.add('copied');
-                const original = btn.textContent;
-                btn.textContent = 'Copied';
-                setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 1500);
-              } catch (_) {
-                const original = btn.textContent;
-                btn.textContent = 'Failed';
-                setTimeout(() => { btn.textContent = original; }, 1500);
-              }
-            };
-            copyText(text);
+              };
+              copyText(text);
+            });
           });
-        });
         function close() {
           interfaceSuccessMount.style.display = "none";
           interfaceSuccessMount.innerHTML = "";
