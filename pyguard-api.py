@@ -52,7 +52,6 @@ from cryptography.fernet import Fernet
 # File locations (server-side)
 DATA_DIR = Path("/etc/pyguard")
 ADMIN_PASS_HASH_PATH = DATA_DIR / "admin.pass.hash"
-ADMIN_PASS_HASH = ""
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret_key_change_me")
 ACCESS_TOKEN_EXP_SECONDS = 60 * 15
 REFRESH_TOKEN_EXP_SECONDS = 60 * 60 * 24
