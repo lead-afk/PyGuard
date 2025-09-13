@@ -35,15 +35,14 @@ Call:
 from dotenv import load_dotenv
 load_dotenv()
 
+import json
 from pathlib import Path
 import os
-import stat
-from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request, Response, status
+from fastapi import FastAPI, HTTPException, Depends, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
 from pydantic import BaseModel
-import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
 import base64
@@ -150,29 +149,70 @@ def decrypt_password(token: str, secret_key: str) -> str:
   
   return fernet.decrypt(token.encode()).decode()
 
-def validate_registered_user(username: str, password: str) -> bool:
-    """Check if the provided username is a registered admin user."""
-    import json
+def encrypt_password(password: str, secret_key: str) -> str:
+  fernet_key = generate_fernet_key(secret_key)
+  fernet = Fernet(fernet_key)
 
-    users_data_path = os.getenv("PYGUARD_USERS_PATH", "invalid_users_path")
-    users_path = Path(users_data_path)
+  return fernet.encrypt(password.encode()).decode()
+
+def get_users_file_path() -> Path:
+    path = os.getenv("PYGUARD_USERS_PATH", "invalid_users_path")
+    return Path(path)
+
+def load_users_data() -> dict:
+    users_path = get_users_file_path()
     if not users_path.exists():
-        return False
+        return {}
     try:
-        with open(users_path) as f:
-            data = json.load(f)
-        
-        admin_users = data.get("admin_users", [])
-        for user in admin_users:
-            if user.get("name") == username:
-                decrypted_password = decrypt_password(user.get("password_hash"), JWT_SECRET_KEY)
-
-                return decrypted_password == password
-        
-        return False
+        with open(users_path, 'r') as f:
+            return json.load(f)
     except Exception as e:
         log.error("Failed reading users data file: %s", e)
+        return {}
+
+def find_user_in_file(username: str) -> str | None:
+    data = load_users_data()
+    for user in data.get("admin_users", []):
+        if user.get("username") == username:
+            return user
+    
+    return None
+    
+def save_users_data(data: dict) -> bool:
+    users_path = get_users_file_path()
+
+    try:
+        with open(users_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        log.error("Failed writing users data file: %s", e)
         return False
+    
+def update_user_data(new_user: dict) -> bool:
+    data = load_users_data()
+    admin_users = data.get("admin_users", [])
+    for user in admin_users:
+        if user.get("name") == new_user.get("name"):
+            encrypted_password = encrypt_password(new_user.get("password"), JWT_SECRET_KEY)
+            user["password_hash"] = encrypted_password
+            data["admin_users"] = admin_users
+            return save_users_data(data)
+
+    raise HTTPException(status_code=404, detail="User not found")
+
+def validate_registered_user(username: str, password: str) -> bool:
+    """Check if the provided username is a registered admin user."""
+    user = find_user_in_file(username)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    user_password = user.get("password_hash")
+    decrypted_password = decrypt_password(user_password, JWT_SECRET_KEY)
+
+    if decrypted_password is None or decrypted_password != password:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
 
 def _issue_access_token(user_data) -> str:
     now = datetime.now(timezone.utc)
@@ -194,7 +234,7 @@ def _issue_refresh_token(user_data) -> str:
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+def require_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
 
     try:
@@ -226,8 +266,7 @@ def login(req: LoginReq):
     username = req.username
     password = req.password
 
-    if validate_registered_user(username, password) is False:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+    validate_registered_user(username, password)
 
     user_data = {
         "username": req.username,
@@ -263,56 +302,24 @@ def refresh(req: RefreshReq):
     }
 
 @app.get('/user')
-def get_user_info(user=Depends(get_current_user)):
-    print(user)
-
+def get_user_info(user=Depends(require_jwt)):
     return user
 
-def require_jwt(authorization: str = Header(None)):
-    """Require a valid Bearer JWT signed with the server secret."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing Bearer token")
-
-    token = authorization.split(" ", 1)[1]
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
-        if payload.get("type") != "access":
-            raise HTTPException(status_code=403, detail="Wrong token type")
-        log.debug(
-            "Auth success: token iat=%s exp=%s", payload.get("iat"), payload.get("exp")
-        )
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=403, detail="Invalid token")
-
 @app.post("/change-password")
-def api_change_password(req: ChangePasswordReq, _=Depends(require_jwt)):
+def api_change_password(req: ChangePasswordReq, response: Response, user=Depends(require_jwt)):
     """Change the admin password (requires valid access token)."""
-    h_conf = load_admin_hash()
-    if not h_conf:
-        raise HTTPException(
-            status_code=500, detail="Admin password not configured on server"
-        )
+    
     try:
-        ok = bcrypt.checkpw(req.old_password.encode(), h_conf.encode())
-    except Exception:
-        raise HTTPException(status_code=500, detail="Password verification failed")
-    if not ok:
-        raise HTTPException(status_code=401, detail="Invalid current password")
+        validate_registered_user(user.get("username"), req.old_password)
+    except HTTPException:
+        raise HTTPException(status_code=401, detail="Incorrect password")
 
-    if len(req.new_password) < 1:
-        raise HTTPException(status_code=400, detail="New password too short (min 1 char)")
+    update_user_data({
+        "username": user.get("username"),
+        "password": req.new_password
+    })
 
-    try:
-        new_hash = bcrypt.hashpw(req.new_password.encode(), bcrypt.gensalt()).decode()
-        ADMIN_PASS_HASH_PATH.write_text(new_hash)
-        os.chmod(ADMIN_PASS_HASH_PATH, stat.S_IRUSR | stat.S_IWUSR)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed saving new password: {e}")
-
-    return {"changed": True}
+    response.status_code = status.HTTP_200_OK
 
 # ---------------------------------------------------------------------------
 # PyGuard management endpoints (all require valid JWT)

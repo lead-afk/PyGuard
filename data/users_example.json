@@ -1,7 +1,7 @@
 {
   "admin_users": [
     {
-      "name": "admin",
+      "username": "admin",
       "password_hash": "gAAAAABoxLKxVYn54sWmNYkkEg9dUCVGO_UlTBhzzBr4u6dZdp-k5uFuy9r493-gaD8MgYeUF4tYwybrFpCVt9ATVMgda7xGlA=="
     }
   ]
