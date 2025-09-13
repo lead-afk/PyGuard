@@ -128,3 +128,6 @@ Desktop.ini
 venv/
 ENV/
 env/
+
+# data files
+data/users.json

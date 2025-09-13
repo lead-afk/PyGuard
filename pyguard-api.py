@@ -36,7 +36,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pathlib import Path
-import secrets
 import os
 import stat
 from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request, Response, status
@@ -47,8 +46,9 @@ from pydantic import BaseModel
 import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
-import secrets as _secrets
-
+import base64
+import hashlib
+from cryptography.fernet import Fernet
 
 # File locations (server-side)
 DATA_DIR = Path("/etc/pyguard")
@@ -127,7 +127,6 @@ async def _log_origin(request: Request, call_next):
 def cors_test():
     return {"ok": True, "message": "CORS reachable"}
 
-
 @app.get("/")
 def root_status(request: Request):
     return {
@@ -139,24 +138,41 @@ def root_status(request: Request):
         },
         "status": "ok",
     }
+    
+def generate_fernet_key(secret_key: str) -> bytes:
+  digest = hashlib.sha256(secret_key.encode()).digest()
 
-def ensure_data_dir():
+  return base64.urlsafe_b64encode(digest)
+
+def decrypt_password(token: str, secret_key: str) -> str:
+  fernet_key = generate_fernet_key(secret_key)
+  fernet = Fernet(fernet_key)
+  
+  return fernet.decrypt(token.encode()).decode()
+
+def validate_registered_user(username: str, password: str) -> bool:
+    """Check if the provided username is a registered admin user."""
+    import json
+
+    users_data_path = os.getenv("PYGUARD_USERS_PATH", "invalid_users_path")
+    users_path = Path(users_data_path)
+    if not users_path.exists():
+        return False
     try:
-        DATA_DIR.mkdir(mode=0o700, exist_ok=True)
-    except PermissionError:
-        # Caller may not be root during development; keep going and let reads fail
-        pass
+        with open(users_path) as f:
+            data = json.load(f)
+        
+        admin_users = data.get("admin_users", [])
+        for user in admin_users:
+            if user.get("name") == username:
+                decrypted_password = decrypt_password(user.get("password_hash"), JWT_SECRET_KEY)
 
-
-def load_admin_hash():
-    """Return bcrypt hash string or None if not configured."""
-    try:
-        h = ADMIN_PASS_HASH_PATH.read_text().strip()
-        if not h:
-            return None
-        return h
-    except Exception:
-        return None
+                return decrypted_password == password
+        
+        return False
+    except Exception as e:
+        log.error("Failed reading users data file: %s", e)
+        return False
 
 def _issue_access_token(user_data) -> str:
     now = datetime.now(timezone.utc)
@@ -207,17 +223,11 @@ class ChangePasswordReq(BaseModel):
 @app.post("/login")
 def login(req: LoginReq):
     """Verify password and return access + refresh tokens."""
-    h_conf = ADMIN_PASS_HASH
-    if not h_conf:
-        raise HTTPException(
-            status_code=500, detail="Admin password not configured on server"
-        )
-    try:
-        ok = bcrypt.checkpw(req.password.encode(), h_conf.encode())
-    except Exception:
-        raise HTTPException(status_code=500, detail="Password verification failed")
-    if not ok:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    username = req.username
+    password = req.password
+
+    if validate_registered_user(username, password) is False:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
 
     user_data = {
         "username": req.username,
