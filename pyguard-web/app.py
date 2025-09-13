@@ -115,6 +115,12 @@ async def auth_middleware(request: Request, call_next):
                     return RedirectResponse("/login", status_code=303)
 
                 resp = await client.post(f"{API_BASE}/refresh", json={"refresh_token": refresh_token})
+
+                if resp.status_code != 200:
+                    response = RedirectResponse("/login", status_code=303)
+                    response = clear_auth_cookies(response)
+                    return response
+
                 data = resp.json()
 
                 response = await call_next(request)
