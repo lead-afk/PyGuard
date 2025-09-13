@@ -8,3 +8,5 @@ itsdangerous
 python-multipart
 psutil
 aiofiles
+python-dotenv
+cryptography

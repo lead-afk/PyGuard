@@ -32,29 +32,34 @@ Call:
   curl -X POST -H "Content-Type: application/json" -d '{"username":"admin","password":"..."}' http://127.0.0.1:8000/login
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
+import json
 from pathlib import Path
-import secrets
 import os
-import stat
-from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
 from pydantic import BaseModel
-import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
-import secrets as _secrets
+import base64
+import hashlib
+from cryptography.fernet import Fernet
 
 # File locations (server-side)
 DATA_DIR = Path("/etc/pyguard")
 ADMIN_PASS_HASH_PATH = DATA_DIR / "admin.pass.hash"
-API_KEY_PATH = DATA_DIR / "api_key"
-TOKEN_EXP_SECONDS = 3600  # 1 hour
-REFRESH_TOKEN_PATH = DATA_DIR / "refresh_token"
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret_key_change_me")
+ACCESS_TOKEN_EXP_SECONDS = 60 * 15
+REFRESH_TOKEN_EXP_SECONDS = 60 * 60 * 24
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("pyguard-api")
 
+security = HTTPBearer()
 app = FastAPI(title="pyguard API (starter)")
 
 # CORS: allow web dashboard (localhost:6656) to call API with Authorization header
@@ -120,7 +125,6 @@ async def _log_origin(request: Request, call_next):
 def cors_test():
     return {"ok": True, "message": "CORS reachable"}
 
-
 @app.get("/")
 def root_status(request: Request):
     return {
@@ -132,143 +136,121 @@ def root_status(request: Request):
         },
         "status": "ok",
     }
+    
+def generate_fernet_key(secret_key: str) -> bytes:
+  digest = hashlib.sha256(secret_key.encode()).digest()
 
+  return base64.urlsafe_b64encode(digest)
+
+def decrypt_password(token: str, secret_key: str) -> str:
+  fernet_key = generate_fernet_key(secret_key)
+  fernet = Fernet(fernet_key)
+  
+  return fernet.decrypt(token.encode()).decode()
+
+def encrypt_password(password: str, secret_key: str) -> str:
+  fernet_key = generate_fernet_key(secret_key)
+  fernet = Fernet(fernet_key)
+
+  return fernet.encrypt(password.encode()).decode()
+
+def get_users_file_path() -> Path:
+    path = os.getenv("PYGUARD_USERS_PATH", "invalid_users_path")
+    return Path(path)
+
+def load_users_data() -> dict:
+    users_path = get_users_file_path()
+    if not users_path.exists():
+        return {}
+    try:
+        with open(users_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        log.error("Failed reading users data file: %s", e)
+        return {}
+
+def find_user_in_file(username: str) -> str | None:
+    data = load_users_data()
+    for user in data.get("admin_users", []):
+        if user.get("username") == username:
+            return user
+    
+    return None
+    
+def save_users_data(data: dict) -> bool:
+    users_path = get_users_file_path()
+
+    try:
+        with open(users_path, 'w') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        log.error("Failed writing users data file: %s", e)
+        return False
+    
+def update_user_data(new_user: dict) -> bool:
+    data = load_users_data()
+    admin_users = data.get("admin_users", [])
+    for user in admin_users:
+        if user.get("name") == new_user.get("name"):
+            encrypted_password = encrypt_password(new_user.get("password"), JWT_SECRET_KEY)
+            user["password_hash"] = encrypted_password
+            data["admin_users"] = admin_users
+            return save_users_data(data)
+
+    raise HTTPException(status_code=404, detail="User not found")
+
+def validate_registered_user(username: str, password: str) -> bool:
+    """Check if the provided username is a registered admin user."""
+    user = find_user_in_file(username)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    user_password = user.get("password_hash")
+    decrypted_password = decrypt_password(user_password, JWT_SECRET_KEY)
+
+    if decrypted_password is None or decrypted_password != password:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+def _issue_access_token(user_data) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {    
+        "iat": now,
+        "exp": now + timedelta(seconds=ACCESS_TOKEN_EXP_SECONDS),
+        "type": "access",
+        "user": user_data
+    }
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
+
+def _issue_refresh_token(user_data) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "iat": now,
+        "exp": now + timedelta(seconds=REFRESH_TOKEN_EXP_SECONDS),
+        "type": "refresh",
+        "user": user_data
+    }
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
+
+def require_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+        
+        return {
+            "expires_at": payload['exp'],
+            **payload['user']
+        }
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 class LoginReq(BaseModel):
+    username: str
     password: str
-
-
-def ensure_data_dir():
-    try:
-        DATA_DIR.mkdir(mode=0o700, exist_ok=True)
-    except PermissionError:
-        # Caller may not be root during development; keep going and let reads fail
-        pass
-
-
-def load_admin_hash():
-    """Return bcrypt hash string or None if not configured."""
-    try:
-        h = ADMIN_PASS_HASH_PATH.read_text().strip()
-        if not h:
-            return None
-        return h
-    except Exception:
-        return None
-
-
-def load_api_key() -> str | None:
-    try:
-        return API_KEY_PATH.read_text().strip()
-    except Exception:
-        return None
-
-
-def save_api_key(key: str):
-    try:
-        API_KEY_PATH.write_text(key)
-        os.chmod(API_KEY_PATH, stat.S_IRUSR | stat.S_IWUSR)
-    except Exception as e:
-        raise
-
-
-def ensure_api_key() -> str:
-    """Return existing API key or create a new one and persist it."""
-    ensure_data_dir()
-    k = load_api_key()
-    if k:
-        return k
-    # generate a URL-safe token
-    k = _secrets.token_urlsafe(64)
-    save_api_key(k)
-    return k
-
-
-def load_refresh_token() -> str | None:
-    try:
-        return REFRESH_TOKEN_PATH.read_text().strip()
-    except Exception:
-        return None
-
-
-def save_refresh_token(token: str):
-    try:
-        REFRESH_TOKEN_PATH.write_text(token)
-        os.chmod(REFRESH_TOKEN_PATH, stat.S_IRUSR | stat.S_IWUSR)
-    except Exception:
-        raise
-
-
-SECRET = "super_secret_key"  # w env lub pliku
-ACCESS_EXP_SECONDS = 60 * 15
-REFRESH_EXP_SECONDS = 60 * 60 * 24
-
-
-def _issue_access_token() -> str:
-    now = datetime.utcnow()
-    payload = {
-        "iat": now,
-        "exp": now + timedelta(seconds=ACCESS_EXP_SECONDS),
-        "type": "access",
-    }
-    return jwt.encode(payload, SECRET, algorithm="HS256")
-
-
-def _issue_refresh_token() -> str:
-    now = datetime.utcnow()
-    payload = {
-        "iat": now,
-        "exp": now + timedelta(seconds=REFRESH_EXP_SECONDS),
-        "type": "refresh",
-    }
-    return jwt.encode(payload, SECRET, algorithm="HS256")
-
-
-@app.post("/login")
-def login(payload: LoginReq):
-    """Verify password and return access + refresh tokens."""
-    h_conf = load_admin_hash()
-    if not h_conf:
-        raise HTTPException(
-            status_code=500, detail="Admin password not configured on server"
-        )
-    try:
-        ok = bcrypt.checkpw(payload.password.encode(), h_conf.encode())
-    except Exception:
-        raise HTTPException(status_code=500, detail="Password verification failed")
-    if not ok:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    token = _issue_access_token()
-    refresh = _issue_refresh_token()
-
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "expires_in": ACCESS_EXP_SECONDS,
-        "refresh_token": refresh,
-    }
-
-
-def require_jwt(authorization: str = Header(None)):
-    """Require a valid Bearer JWT signed with the server secret."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing Bearer token")
-
-    token = authorization.split(" ", 1)[1]
-    try:
-        payload = jwt.decode(token, SECRET, algorithms=["HS256"])
-        if payload.get("type") != "access":
-            raise HTTPException(status_code=403, detail="Wrong token type")
-        log.debug(
-            "Auth success: token iat=%s exp=%s", payload.get("iat"), payload.get("exp")
-        )
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=403, detail="Invalid token")
-
 
 class RefreshReq(BaseModel):
     refresh_token: str
@@ -277,75 +259,66 @@ class ChangePasswordReq(BaseModel):
     old_password: str
     new_password: str
 
-@app.post("/change-password")
-def api_change_password(req: ChangePasswordReq, _=Depends(require_jwt)):
-    """Change the admin password (requires valid access token)."""
-    h_conf = load_admin_hash()
-    if not h_conf:
-        raise HTTPException(
-            status_code=500, detail="Admin password not configured on server"
-        )
-    try:
-        ok = bcrypt.checkpw(req.old_password.encode(), h_conf.encode())
-    except Exception:
-        raise HTTPException(status_code=500, detail="Password verification failed")
-    if not ok:
-        raise HTTPException(status_code=401, detail="Invalid current password")
+@app.post("/login")
+def login(req: LoginReq):
+    """Verify password and return access + refresh tokens."""
+    username = req.username
+    password = req.password
 
-    if len(req.new_password) < 1:
-        raise HTTPException(status_code=400, detail="New password too short (min 1 char)")
+    validate_registered_user(username, password)
 
-    try:
-        new_hash = bcrypt.hashpw(req.new_password.encode(), bcrypt.gensalt()).decode()
-        ADMIN_PASS_HASH_PATH.write_text(new_hash)
-        os.chmod(ADMIN_PASS_HASH_PATH, stat.S_IRUSR | stat.S_IWUSR)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed saving new password: {e}")
+    user_data = {
+        "username": req.username,
+    }
+    token = _issue_access_token(user_data)
+    refresh = _issue_refresh_token(user_data)
 
-    return {"changed": True}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXP_SECONDS,
+        "refresh_token": refresh,
+    }
 
 @app.post("/refresh")
 def refresh(req: RefreshReq):
     """Exchange a valid refresh token for a new short-lived access JWT."""
     try:
-        payload = jwt.decode(req.refresh_token, SECRET, algorithms=["HS256"])
+        payload = jwt.decode(req.refresh_token, JWT_SECRET_KEY, algorithms=["HS256"])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=403, detail="Wrong token type")
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Refresh token expired")
-    except jwt.InvalidTokenError:
+    except:
         raise HTTPException(status_code=403, detail="Invalid refresh token")
+    
+    token = _issue_access_token(payload.get("user"))
+    refresh = _issue_refresh_token(payload.get("user"))
 
-    token = _issue_access_token()
     return {
         "access_token": token,
         "token_type": "bearer",
-        "expires_in": ACCESS_EXP_SECONDS,
+        "expires_in": ACCESS_TOKEN_EXP_SECONDS,
+        "refresh_token": refresh,
     }
 
+@app.get('/user')
+def get_user_info(user=Depends(require_jwt)):
+    return user
 
-@app.post("/logout")
-def logout(req: RefreshReq):
-    """Revoke the configured refresh token (if it matches the provided one)."""
-    stored = load_refresh_token()
-    if not stored:
-        return {"revoked": False}
-    if not _secrets.compare_digest(req.refresh_token, stored):
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+@app.post("/change-password")
+def api_change_password(req: ChangePasswordReq, response: Response, user=Depends(require_jwt)):
+    """Change the admin password (requires valid access token)."""
+    
     try:
-        REFRESH_TOKEN_PATH.unlink()
-    except Exception:
-        pass
-    return {"revoked": True}
+        validate_registered_user(user.get("username"), req.old_password)
+    except HTTPException:
+        raise HTTPException(status_code=401, detail="Incorrect password")
 
+    update_user_data({
+        "username": user.get("username"),
+        "password": req.new_password
+    })
 
-@app.get("/status")
-def status(_payload=Depends(require_jwt)):
-    return {
-        "admin_hash_exists": ADMIN_PASS_HASH_PATH.exists(),
-        "api_key_exists": API_KEY_PATH.exists(),
-    }
-
+    response.status_code = status.HTTP_200_OK
 
 # ---------------------------------------------------------------------------
 # PyGuard management endpoints (all require valid JWT)

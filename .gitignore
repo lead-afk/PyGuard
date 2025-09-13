@@ -125,7 +125,11 @@ Desktop.ini
 # dotenv
 .env
 .env.*
+!.env.example
 .venv/
 venv/
 ENV/
 env/
+
+# data files
+data/users.json
