@@ -33,12 +33,16 @@ Call:
 """
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import json
 from pathlib import Path
 import os
-from fastapi import FastAPI, HTTPException, Depends, Request, Response, status
+from fastapi import FastAPI, HTTPException, Depends, Request, Response, status, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
@@ -47,7 +51,6 @@ import jwt
 from datetime import datetime, timedelta, timezone
 import base64
 import hashlib
-from cryptography.fernet import Fernet
 
 # File locations (server-side)
 DATA_DIR = Path("/etc/pyguard")
@@ -59,8 +62,24 @@ REFRESH_TOKEN_EXP_SECONDS = 60 * 60 * 24
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("pyguard-api")
 
-security = HTTPBearer()
-app = FastAPI(title="pyguard API (starter)")
+# Retain HTTPBearer for optional Authorization header support but fall back to cookies.
+security = None  # no longer used directly; kept for backward compatibility reference
+DEBUG = os.getenv("PYGUARD_DEBUG", "1") in ("1", "true", "True")
+app = FastAPI(title="PyGuard Unified API+Web", debug=DEBUG)
+
+# ---------------- Web assets (templates + static) -----------------
+_web_dir = Path(__file__).parent / "pyguard-web"
+_templates_dir = _web_dir / "templates"
+_static_dir = _web_dir / "static"
+templates = (
+    Jinja2Templates(directory=str(_templates_dir)) if _templates_dir.exists() else None
+)
+if _static_dir.exists():
+    app.mount(
+        "/static",
+        StaticFiles(directory=str(_static_dir)),
+        name="static",
+    )
 
 # CORS: allow web dashboard (localhost:6656) to call API with Authorization header
 _default_allowed_origins = ["*"]
@@ -95,6 +114,90 @@ app.add_middleware(
 
 log.info("CORS configured: origins=%s regex=%s", _allow_origins, _allow_origin_regex)
 
+# ---------------- Web auth helpers & middleware -----------------
+
+protected_routes = ["/", "/dashboard"]
+
+
+def _set_auth_cookies(resp: Response, data: dict):
+    resp.set_cookie(
+        key="access_token",
+        value=data["access_token"],
+        httponly=True,
+        secure=not DEBUG,
+        samesite="lax",
+        expires=ACCESS_TOKEN_EXP_SECONDS,
+    )
+    resp.set_cookie(
+        key="refresh_token",
+        value=data["refresh_token"],
+        httponly=True,
+        secure=not DEBUG,
+        samesite="lax",
+        expires=REFRESH_TOKEN_EXP_SECONDS,
+    )
+    return resp
+
+
+def _clear_auth(resp: Response):
+    resp.delete_cookie("access_token")
+    resp.delete_cookie("refresh_token")
+    return resp
+
+
+@app.middleware("http")
+async def _web_auth_middleware(request: Request, call_next):
+    path = request.url.path
+    if path not in protected_routes:
+        return await call_next(request)
+    access_token = request.cookies.get("access_token")
+    refresh_token = request.cookies.get("refresh_token")
+    should_refresh = False
+    if not access_token and refresh_token:
+        should_refresh = True
+    if not access_token and not refresh_token:
+        return RedirectResponse("/login", status_code=303)
+    if access_token:
+        try:
+            payload = jwt.decode(access_token, JWT_SECRET_KEY, algorithms=["HS256"])
+            request.state.user = payload.get("user")
+            return await call_next(request)
+        except jwt.ExpiredSignatureError:
+            should_refresh = True
+        except jwt.InvalidTokenError:
+            if refresh_token:
+                should_refresh = True
+            else:
+                resp = RedirectResponse("/login", status_code=303)
+                return _clear_auth(resp)
+    if should_refresh:
+        # Directly invoke refresh logic instead of HTTP round-trip
+        try:
+            if not refresh_token:
+                return RedirectResponse("/login", status_code=303)
+            payload = jwt.decode(refresh_token, JWT_SECRET_KEY, algorithms=["HS256"])
+            if payload.get("type") != "refresh":
+                resp = RedirectResponse("/login", status_code=303)
+                return _clear_auth(resp)
+            # Issue new tokens
+            user_data = payload.get("user")
+            data = {
+                "access_token": _issue_access_token(user_data),
+                "refresh_token": _issue_refresh_token(user_data),
+            }
+            response = await call_next(request)
+            response = _set_auth_cookies(response, data)
+            new_payload = jwt.decode(
+                data["access_token"], JWT_SECRET_KEY, algorithms=["HS256"]
+            )
+            request.state.user = new_payload.get("user")
+            return response
+        except Exception:
+            resp = RedirectResponse("/login", status_code=303)
+            return _clear_auth(resp)
+    # fallback (should not reach here often)
+    return await call_next(request)
+
 
 # Lightweight request logger (focus on Origin & path)
 @app.middleware("http")
@@ -125,6 +228,7 @@ async def _log_origin(request: Request, call_next):
 def cors_test():
     return {"ok": True, "message": "CORS reachable"}
 
+
 @app.get("/")
 def root_status(request: Request):
     return {
@@ -136,92 +240,111 @@ def root_status(request: Request):
         },
         "status": "ok",
     }
-    
+
+
 def generate_fernet_key(secret_key: str) -> bytes:
-  digest = hashlib.sha256(secret_key.encode()).digest()
+    digest = hashlib.sha256(secret_key.encode()).digest()
+    return base64.urlsafe_b64encode(digest)
 
-  return base64.urlsafe_b64encode(digest)
 
-def decrypt_password(token: str, secret_key: str) -> str:
-  fernet_key = generate_fernet_key(secret_key)
-  fernet = Fernet(fernet_key)
-  
-  return fernet.decrypt(token.encode()).decode()
+# Initialize shared JWT secret (generated/stored under /etc/pyguard/secret.key)
+try:
+    from pyguard import ensure_secret_jwt as _pg_ensure_secret_jwt
 
-def encrypt_password(password: str, secret_key: str) -> str:
-  fernet_key = generate_fernet_key(secret_key)
-  fernet = Fernet(fernet_key)
+    _secret = _pg_ensure_secret_jwt()
+    # Refresh local constant if environment was just populated
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", _secret or JWT_SECRET_KEY)
+except (
+    Exception
+) as _e:  # Do not block API startup if key generation fails; fallback later
+    logging.warning("Failed ensure_secret_jwt at startup: %s", _e)
 
-  return fernet.encrypt(password.encode()).decode()
 
 def get_users_file_path() -> Path:
     path = os.getenv("PYGUARD_USERS_PATH", "invalid_users_path")
     return Path(path)
+
 
 def load_users_data() -> dict:
     users_path = get_users_file_path()
     if not users_path.exists():
         return {}
     try:
-        with open(users_path, 'r') as f:
+        with open(users_path, "r") as f:
             return json.load(f)
     except Exception as e:
         log.error("Failed reading users data file: %s", e)
         return {}
+
 
 def find_user_in_file(username: str) -> str | None:
     data = load_users_data()
     for user in data.get("admin_users", []):
         if user.get("username") == username:
             return user
-    
+
     return None
-    
+
+
 def save_users_data(data: dict) -> bool:
     users_path = get_users_file_path()
 
     try:
-        with open(users_path, 'w') as f:
+        with open(users_path, "w") as f:
             json.dump(data, f, indent=2)
         return True
     except Exception as e:
         log.error("Failed writing users data file: %s", e)
         return False
-    
+
+
 def update_user_data(new_user: dict) -> bool:
     data = load_users_data()
     admin_users = data.get("admin_users", [])
     for user in admin_users:
         if user.get("name") == new_user.get("name"):
-            encrypted_password = encrypt_password(new_user.get("password"), JWT_SECRET_KEY)
+            encrypted_password = hash_password(new_user.get("password"))
             user["password_hash"] = encrypted_password
             data["admin_users"] = admin_users
             return save_users_data(data)
 
     raise HTTPException(status_code=404, detail="User not found")
 
+
+import bcrypt
+
+
+def hash_password(pw: str) -> str:
+    return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(pw: str, stored_hash: str) -> bool:
+    return bcrypt.checkpw(pw.encode(), stored_hash.encode())
+
+
 def validate_registered_user(username: str, password: str) -> bool:
     """Check if the provided username is a registered admin user."""
     user = find_user_in_file(username)
 
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    
-    user_password = user.get("password_hash")
-    decrypted_password = decrypt_password(user_password, JWT_SECRET_KEY)
+        print("User not found:", username)
+        raise HTTPException(status_code=401, detail="User not registered")
 
-    if decrypted_password is None or decrypted_password != password:
+    user_hashed_password = user.get("password_hash")
+    if not verify_password(password, user_hashed_password):
         raise HTTPException(status_code=401, detail="Invalid username or password")
+
 
 def _issue_access_token(user_data) -> str:
     now = datetime.now(timezone.utc)
-    payload = {    
+    payload = {
         "iat": now,
         "exp": now + timedelta(seconds=ACCESS_TOKEN_EXP_SECONDS),
         "type": "access",
-        "user": user_data
+        "user": user_data,
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
+
 
 def _issue_refresh_token(user_data) -> str:
     now = datetime.now(timezone.utc)
@@ -229,56 +352,147 @@ def _issue_refresh_token(user_data) -> str:
         "iat": now,
         "exp": now + timedelta(seconds=REFRESH_TOKEN_EXP_SECONDS),
         "type": "refresh",
-        "user": user_data
+        "user": user_data,
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm="HS256")
 
-def require_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
 
+def require_jwt(request: Request):
+    """Authorize a request using either Authorization: Bearer header or access_token cookie.
+
+    We moved to httpOnly cookies for the web UI; JS cannot read the token to set headers,
+    so API endpoints must accept the cookie. Programmatic clients can still send a Bearer header.
+    """
+    # Prefer Authorization header if present
+    auth = request.headers.get("authorization")
+    token = None
+    if auth and auth.lower().startswith("bearer "):
+        token = auth.split(None, 1)[1].strip()
+    else:
+        token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing credentials"
+        )
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
-        
-        return {
-            "expires_at": payload['exp'],
-            **payload['user']
-        }
+        return {"expires_at": payload["exp"], **payload["user"]}
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+        )
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
+
 
 class LoginReq(BaseModel):
     username: str
     password: str
 
+
 class RefreshReq(BaseModel):
     refresh_token: str
+
 
 class ChangePasswordReq(BaseModel):
     old_password: str
     new_password: str
 
+
+@app.get("/login", response_class=HTMLResponse)
+async def web_login_page(request: Request):
+    if templates is None:
+        raise HTTPException(status_code=500, detail="Templates not available")
+    # If already has access token cookie try decode to skip login
+    token = request.cookies.get("access_token")
+    if token:
+        try:
+            jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+            return RedirectResponse("/dashboard", status_code=303)
+        except Exception:
+            pass
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
 @app.post("/login")
-def login(req: LoginReq):
-    """Verify password and return access + refresh tokens."""
-    username = req.username
-    password = req.password
+async def unified_login(request: Request, response: Response):
+    """Handle both JSON API login and form POST login.
 
-    validate_registered_user(username, password)
+    JSON (Content-Type: application/json) => returns token payload
+    Form => sets cookies and redirects
+    """
+    ctype = request.headers.get("content-type", "")
+    is_json = "application/json" in ctype
+    try:
+        if is_json:
+            payload = await request.json()
+            req = LoginReq(**payload)
+            validate_registered_user(req.username, req.password)
+            user_data = {"username": req.username}
+            token = _issue_access_token(user_data)
+            refresh = _issue_refresh_token(user_data)
+            return {
+                "access_token": token,
+                "token_type": "bearer",
+                "expires_in": ACCESS_TOKEN_EXP_SECONDS,
+                "refresh_token": refresh,
+            }
+        # Form login
+        form = await request.form()
+        username = form.get("username")
+        password = form.get("password")
+        if not username or not password:
+            if templates is None:
+                raise HTTPException(status_code=400, detail="Invalid credentials")
+            return templates.TemplateResponse(
+                "login.html", {"request": request, "error": "Invalid credentials"}
+            )
+        validate_registered_user(username, password)
+        user_data = {"username": username}
+        token = _issue_access_token(user_data)
+        refresh = _issue_refresh_token(user_data)
+        redirect = RedirectResponse("/dashboard", status_code=303)
+        _set_auth_cookies(redirect, {"access_token": token, "refresh_token": refresh})
+        return redirect
+    except HTTPException:
+        if is_json:
+            raise
+        if templates is None:
+            raise
+        return templates.TemplateResponse(
+            "login.html", {"request": request, "error": "Invalid username or password"}
+        )
 
-    user_data = {
-        "username": req.username,
-    }
-    token = _issue_access_token(user_data)
-    refresh = _issue_refresh_token(user_data)
 
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "expires_in": ACCESS_TOKEN_EXP_SECONDS,
-        "refresh_token": refresh,
-    }
+@app.post("/logout")
+async def web_logout(response: Response):
+    _clear_auth(response)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
+@app.get("/")
+async def root_redirect():
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    if templates is None:
+        raise HTTPException(status_code=500, detail="Templates not available")
+    # Attempt to get current user from state (middleware)
+    interfaces = []
+    try:
+        interfaces = list_interfaces()
+    except Exception:
+        interfaces = []
+    log.info("Render dashboard with %d interfaces", len(interfaces))
+    return templates.TemplateResponse(
+        "dashboard.html", {"request": request, "interfaces": interfaces}
+    )
+
 
 @app.post("/refresh")
 def refresh(req: RefreshReq):
@@ -289,7 +503,7 @@ def refresh(req: RefreshReq):
             raise HTTPException(status_code=403, detail="Wrong token type")
     except:
         raise HTTPException(status_code=403, detail="Invalid refresh token")
-    
+
     token = _issue_access_token(payload.get("user"))
     refresh = _issue_refresh_token(payload.get("user"))
 
@@ -300,25 +514,27 @@ def refresh(req: RefreshReq):
         "refresh_token": refresh,
     }
 
-@app.get('/user')
+
+@app.get("/user")
 def get_user_info(user=Depends(require_jwt)):
     return user
 
+
 @app.post("/change-password")
-def api_change_password(req: ChangePasswordReq, response: Response, user=Depends(require_jwt)):
+def api_change_password(
+    req: ChangePasswordReq, response: Response, user=Depends(require_jwt)
+):
     """Change the admin password (requires valid access token)."""
-    
+
     try:
         validate_registered_user(user.get("username"), req.old_password)
     except HTTPException:
         raise HTTPException(status_code=401, detail="Incorrect password")
 
-    update_user_data({
-        "username": user.get("username"),
-        "password": req.new_password
-    })
+    update_user_data({"username": user.get("username"), "password": req.new_password})
 
     response.status_code = status.HTTP_200_OK
+
 
 # ---------------------------------------------------------------------------
 # PyGuard management endpoints (all require valid JWT)
@@ -539,13 +755,10 @@ def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jw
         update_config(interface, "network", "network", req.network)
         something_changed = True
 
-
     if req.name is not None and interface != req.name:
         rename_interface(interface, req.name)
         interface = req.name
         something_changed = True
-
-
 
     d = load_data(interface)
     if not d.get("server").get("private_key"):
@@ -564,7 +777,12 @@ def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jw
         "active": is_interface_active(interface),
     }
     print("Successful initialization of interface:", interface)
-    return {"interface": interface, "interfaces": data, "new_data": resp, "something_changed": something_changed}
+    return {
+        "interface": interface,
+        "interfaces": data,
+        "new_data": resp,
+        "something_changed": something_changed,
+    }
 
 
 @app.get("/interfaces/{interface}/next_available")
@@ -648,12 +866,16 @@ def _create_peer(interface: str, req: AddPeerReq):
     peers_obj = get_peers_info(interface)
     return peers_obj
 
+
 @app.post("/shell/port/{port}", status_code=201)
 def api_allow_port(port: str, _=Depends(require_jwt)):
 
     settings = load_settings()
     if not settings.get("allow_command_apply"):
-        raise HTTPException(status_code=403, detail="Command application is not allowed, enable it in settings")
+        raise HTTPException(
+            status_code=403,
+            detail="Command application is not allowed, enable it in settings",
+        )
 
     ensure_root()
 
@@ -664,19 +886,26 @@ def api_allow_port(port: str, _=Depends(require_jwt)):
 
     return {"port": port}
 
+
 @app.post("/shell/route/{interface}", status_code=201)
 def api_allow_route(interface: str, _=Depends(require_jwt)):
-    
+
     settings = load_settings()
     if not settings.get("allow_command_apply"):
-        raise HTTPException(status_code=403, detail="Command application is not allowed, enable it in settings")
-    
+        raise HTTPException(
+            status_code=403,
+            detail="Command application is not allowed, enable it in settings",
+        )
+
     ensure_root()
 
     if not command_exists("ufw"):
         raise HTTPException(status_code=400, detail="ufw command not found")
 
-    subprocess.run(["ufw", "route", "allow", "in", "on", interface, "out", "on", interface], check=True)
+    subprocess.run(
+        ["ufw", "route", "allow", "in", "on", interface, "out", "on", interface],
+        check=True,
+    )
 
     return {"interface": interface}
 

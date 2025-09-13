@@ -1,0 +1,22 @@
+version: "3.9"
+services:
+  pyguard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.wg-go
+    container_name: pyguard-wg-go
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    environment:
+      - PYGUARD_WEB_DEBUG=1
+      - PYGUARD_API_BASE=http://127.0.0.1:6655
+    ports:
+      - "6656:6656/tcp"
+      - "51825:51825/udp"
+    #volumes:
+    #  - ../data/pyguard:/etc/pyguard
+    #  - ../data/wireguard:/etc/wireguard
+    #  - ../data/logs:/var/log/pyguard
+    restart: unless-stopped

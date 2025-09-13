@@ -8,10 +8,31 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 API_BASE = os.environ.get("PYGUARD_API_BASE", "http://127.0.0.1:6655")
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret_key_change_me")
+
+
+def _load_jwt_secret() -> str:
+    # Attempt to call ensure_secret_jwt if pyguard core importable (same virtualenv/container)
+    secret = os.getenv("JWT_SECRET_KEY")
+    if not secret:
+        try:
+            from pyguard import ensure_secret_jwt as _pg_ensure_secret_jwt
+
+            secret = _pg_ensure_secret_jwt()
+        except Exception as _e:  # fallback to reading file (e.g., running unprivileged)
+            key_path = "/etc/pyguard/secret.key"
+            try:
+                with open(key_path, "r", encoding="utf-8") as f:
+                    secret = f.read().strip()
+            except Exception:
+                logging.warning("JWT secret not available yet (%s)", _e)
+    return secret or "secret_key_change_me"
+
+
+JWT_SECRET_KEY = _load_jwt_secret()
 DEBUG = os.environ.get("PYGUARD_WEB_DEBUG", "1") in ("1", "true", "True")
 ACCESS_TOKEN_EXP_SECONDS = 60 * 15
 REFRESH_TOKEN_EXP_SECONDS = 60 * 60 * 24
@@ -36,24 +57,30 @@ try:
 except Exception:
     pass
 
+
 def get_current_user(request: Request):
     return getattr(request.state, "user", None)
 
+
 def get_auth_token(request: Request):
     return request.cookies.get("access_token")
+
 
 def clear_auth_cookies(response: Response):
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
     return response
 
+
 def create_api_headers(request: Request) -> dict[str, str]:
     auth_token = get_auth_token(request)
 
     return {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
 
+
 def check_if_token_exists(request: Request):
     return get_auth_token(request) is not None
+
 
 def set_auth_cookies(response: Response, data: dict):
     response.set_cookie(
@@ -62,7 +89,7 @@ def set_auth_cookies(response: Response, data: dict):
         httponly=True,
         secure=not DEBUG,
         samesite="lax",
-        expires=ACCESS_TOKEN_EXP_SECONDS
+        expires=ACCESS_TOKEN_EXP_SECONDS,
     )
     response.set_cookie(
         key="refresh_token",
@@ -70,12 +97,15 @@ def set_auth_cookies(response: Response, data: dict):
         httponly=True,
         secure=not DEBUG,
         samesite="lax",
-        expires=REFRESH_TOKEN_EXP_SECONDS
+        expires=REFRESH_TOKEN_EXP_SECONDS,
     )
 
     return response
 
-protected_routes = [ "/", "/dashboard" ]
+
+protected_routes = ["/", "/dashboard"]
+
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
@@ -83,7 +113,7 @@ async def auth_middleware(request: Request, call_next):
 
     if not path in protected_routes:
         return await call_next(request)
-    
+
     access_token = request.cookies.get("access_token")
     refresh_token = request.cookies.get("refresh_token")
     if not access_token and refresh_token:
@@ -91,7 +121,7 @@ async def auth_middleware(request: Request, call_next):
 
     if not access_token and not refresh_token:
         return RedirectResponse("/login", status_code=303)
-    
+
     if access_token:
         try:
             payload = jwt.decode(access_token, JWT_SECRET_KEY, algorithms=["HS256"])
@@ -114,7 +144,9 @@ async def auth_middleware(request: Request, call_next):
                 if not refresh_token:
                     return RedirectResponse("/login", status_code=303)
 
-                resp = await client.post(f"{API_BASE}/refresh", json={"refresh_token": refresh_token})
+                resp = await client.post(
+                    f"{API_BASE}/refresh", json={"refresh_token": refresh_token}
+                )
 
                 if resp.status_code != 200:
                     response = RedirectResponse("/login", status_code=303)
@@ -125,7 +157,9 @@ async def auth_middleware(request: Request, call_next):
 
                 response = await call_next(request)
                 response = set_auth_cookies(response, data)
-                new_token_data = jwt.decode(data["access_token"], JWT_SECRET_KEY, algorithms=["HS256"])
+                new_token_data = jwt.decode(
+                    data["access_token"], JWT_SECRET_KEY, algorithms=["HS256"]
+                )
                 request.state.user = new_token_data.get("user")
 
                 return response
@@ -134,31 +168,40 @@ async def auth_middleware(request: Request, call_next):
                 response = clear_auth_cookies(response)
                 return response
 
+
 @app.get("/")
 async def root(request: Request):
     return RedirectResponse("/dashboard", status_code=303)
+
 
 @app.get("/login")
 async def login_page(request: Request):
     if check_if_token_exists(request):
         return RedirectResponse("/dashboard", status_code=303)
 
-    return templates.TemplateResponse(
-        "login.html", {"request": request}
-    )
+    return templates.TemplateResponse("login.html", {"request": request})
+
 
 @app.post("/login", response_class=HTMLResponse)
-async def handle_login(request: Request, response: Response, username: str = Form(...), password: str = Form(...)):
+async def handle_login(
+    request: Request,
+    response: Response,
+    username: str = Form(...),
+    password: str = Form(...),
+):
     error_message = None
 
     if not username or not password:
         error_message = "Invalid username or password"
-    
+
     if not error_message:
         async with httpx.AsyncClient(timeout=5.0) as client:
             try:
-                resp = await client.post(f"{API_BASE}/login", json={"username": username, "password": password})
-                
+                resp = await client.post(
+                    f"{API_BASE}/login",
+                    json={"username": username, "password": password},
+                )
+
                 print(resp.status_code, resp.json())
 
                 if resp.status_code != 200:
@@ -169,17 +212,19 @@ async def handle_login(request: Request, response: Response, username: str = For
                     if "access_token" not in data:
                         log.error("API /login response missing access_token: %s", data)
                         error_message = "Malformed API response"
-                    else:    
+                    else:
                         log.info("Login success, redirecting to /dashboard")
 
-                        redirect_response = RedirectResponse("/dashboard", status_code=303)       
+                        redirect_response = RedirectResponse(
+                            "/dashboard", status_code=303
+                        )
                         redirect_response.set_cookie(
                             key="access_token",
                             value=data["access_token"],
                             httponly=True,
                             secure=not DEBUG,
                             samesite="lax",
-                            expires=60 * 15, # 15 minutes
+                            expires=60 * 15,  # 15 minutes
                         )
                         redirect_response.set_cookie(
                             key="refresh_token",
@@ -187,7 +232,7 @@ async def handle_login(request: Request, response: Response, username: str = For
                             httponly=True,
                             secure=not DEBUG,
                             samesite="lax",
-                            expires=60 * 60 * 24 # 24 hours
+                            expires=60 * 60 * 24,  # 24 hours
                         )
 
                         return redirect_response
@@ -198,12 +243,14 @@ async def handle_login(request: Request, response: Response, username: str = For
         "login.html", {"request": request, "error": error_message}
     )
 
+
 @app.post("/logout")
 async def handle_logout(response: Response):
     clear_auth_cookies(response)
 
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
+
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
@@ -228,42 +275,5 @@ async def dashboard(request: Request):
         },
     )
 
-# --------------------
-# Backend proxy layer
-# --------------------
 
-async def _proxy(method: str, path: str, request: Request):
-    # Disallow direct login/refresh via proxy (handled locally)
-    if path.strip("/") in ("login", "refresh"):
-        raise HTTPException(status_code=400, detail="Use web login")
-    
-    auth_token = get_auth_token(request)
-    url = f"{API_BASE}/{path}".rstrip("/")
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {auth_token}"
-    }
-
-    # Forward JSON/body/query params
-    data = await request.body()
-    params = dict(request.query_params)
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        try:
-            resp = await client.request(
-                method,
-                url,
-                headers=headers,
-                params=params or None,
-                content=data if data else None,
-            )
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=502, detail=f"Upstream error: {e}")
-    # Pass through JSON / text / binary
-    content_type = resp.headers.get("content-type", "application/octet-stream")
-    if content_type.startswith("application/json"):
-        return JSONResponse(status_code=resp.status_code, content=resp.json())
-    return Response(content=resp.content, media_type=content_type, status_code=resp.status_code)
-
-@app.api_route("/proxy/{full_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-async def proxy_any(full_path: str, request: Request):
-    return await _proxy(request.method, full_path, request)
+# Legacy proxy endpoints removed in unified mode.

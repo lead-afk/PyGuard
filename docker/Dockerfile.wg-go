@@ -1,0 +1,39 @@
+# PyGuard container with userspace wireguard-go (everything inside)
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard-go \
+    PYGUARD_AUTOCREATE=1
+
+# Build deps for wireguard-go + runtime tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git build-essential golang iproute2 iptables nftables qrencode curl \
+    ca-certificates procps supervisor bash tini jq iputils-ping wireguard-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build wireguard-go (userspace implementation)
+WORKDIR /build
+RUN git clone https://git.zx2c4.com/wireguard-go && \
+    cd wireguard-go && make && install -m 0755 wireguard-go /usr/local/bin/wireguard-go
+
+# App layer
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY pyguard.py pyguard-api.py ./
+# Retain templates & static only (web logic merged into pyguard-api)
+COPY pyguard-web/templates ./pyguard-web/templates
+COPY pyguard-web/static ./pyguard-web/static
+COPY scripts/reset-admin.py ./scripts/reset-admin.py
+
+# Directories for state & logs
+RUN mkdir -p /etc/pyguard /etc/wireguard /var/log/pyguard /etc/supervisor/conf.d
+
+COPY docker/entrypoint-wg-go.sh /entrypoint.sh
+COPY docker/supervisord.conf /etc/supervisor/conf.d/pyguard.conf
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 6656/tcp 51820/udp
+ENTRYPOINT ["/usr/bin/tini","--"]
+CMD ["/entrypoint.sh"]

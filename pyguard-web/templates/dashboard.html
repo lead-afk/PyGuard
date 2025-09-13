@@ -1138,10 +1138,10 @@
     <div id="interfaceSuccessModal" style="display: none"></div>
     <div id="settingsModal" style="display: none"></div>
     <script>
-      // Backend proxy: all API calls go through /proxy so we avoid exposing raw API & token
-      const apiBase = "/proxy";
+      // Unified app mode: direct API (same origin) no /proxy needed
+      const apiBase = ""; // empty = root
       console.log(
-        "[PyGuard] Dashboard script start (proxy mode). apiBase=",
+        "[PyGuard] Dashboard script start (unified mode). apiBase=",
         apiBase
       );
       const headers = () => ({

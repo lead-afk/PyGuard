@@ -327,6 +327,57 @@ def ensure_qrencode_installed():
         print("Please install 'qrencode' using your package manager and re-run.")
 
 
+def ensure_secret_jwt():
+    ensure_root()
+    path_to_key = os.path.join(BASE_DATA_DIR, "secret.key")
+    """Ensure a stable, ASCII JWT secret shared across processes.
+
+    Previous implementation stored raw random bytes; reading them as text could
+    produce inconsistencies or decoding issues. This version guarantees the
+    secret is a URL-safe base64 string (without trailing newlines) and migrates
+    any existing binary file automatically.
+    """
+    ensure_root()
+    path_to_key = os.path.join(BASE_DATA_DIR, "secret.key")
+    os.makedirs(BASE_DATA_DIR, exist_ok=True)
+
+    def _write_secret(b64_secret: str):
+        with open(path_to_key, "w", encoding="utf-8") as f:
+            f.write(b64_secret)
+        os.chmod(path_to_key, stat.S_IRUSR | stat.S_IWUSR)
+
+    import base64, string
+
+    if not os.path.exists(path_to_key):
+        raw = os.urandom(32)
+        b64 = base64.urlsafe_b64encode(raw).decode("utf-8").rstrip("=")
+        _write_secret(b64)
+        secret = b64
+    else:
+        # Read in binary; decide if migration required
+        with open(path_to_key, "rb") as f:
+            content = f.read()
+        try:
+            text = content.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            text = ""  # force migration
+        printable = set(string.printable)
+        needs_migration = (
+            not text
+            or any(c not in printable for c in text)
+            or len(text) < 16  # unusually short for our base64 secret
+        )
+        if needs_migration:
+            # Re-base64 the raw bytes to produce a clean ascii secret
+            b64 = base64.urlsafe_b64encode(content).decode("utf-8").rstrip("=")
+            _write_secret(b64)
+            secret = b64
+        else:
+            secret = text
+    os.environ["JWT_SECRET_KEY"] = secret
+    return secret
+
+
 def ensure_wireguard_installed():
     """Ensure WireGuard is installed. On Debian/Ubuntu, install via apt-get if missing.
 
@@ -838,12 +889,6 @@ def init_server(
     ensure_root()
     ensure_directories()
 
-    print("Trying to create with:")
-    print(f"  Interface: {interface}")
-    print(f"  Port: {port}")
-    print(f"  Network: {network}")
-    print(f"  Public IP: {public_ip}")
-
     def_name, def_port, def_network, def_public_ip = get_new_interface_defaults()
     if not interface:
         interface = def_name
@@ -853,6 +898,12 @@ def init_server(
         network = def_network
     if not public_ip:
         public_ip = def_public_ip
+
+    print("Trying to create with:")
+    print(f"  Interface: {interface}")
+    print(f"  Port: {port}")
+    print(f"  Network: {network}")
+    print(f"  Public IP: {public_ip}")
 
     ok, meta = validate_new_interface(
         interface, port, network, ignore_range_check=ignore_range_check
