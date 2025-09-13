@@ -226,18 +226,18 @@ async def dashboard(request: Request):
 # Backend proxy layer
 # --------------------
 
-def _auth_headers(request: Request) -> dict[str, str]:
-    token = request.session.get("access_token")
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return {"Authorization": f"Bearer {token}"}
-
 async def _proxy(method: str, path: str, request: Request):
     # Disallow direct login/refresh via proxy (handled locally)
     if path.strip("/") in ("login", "refresh"):
         raise HTTPException(status_code=400, detail="Use web login")
+    
+    auth_token = get_auth_token(request)
     url = f"{API_BASE}/{path}".rstrip("/")
-    headers = _auth_headers(request)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {auth_token}"
+    }
+
     # Forward JSON/body/query params
     data = await request.body()
     params = dict(request.query_params)
