@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 load_dotenv()
 
-API_BASE = os.environ.get("PYGUARD_API_BASE", "http://10.0.0.1:6655")
+API_BASE = os.environ.get("PYGUARD_API_BASE", "http://127.0.0.1:6655")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret_key_change_me")
 DEBUG = os.environ.get("PYGUARD_WEB_DEBUG", "1") in ("1", "true", "True")
 ACCESS_TOKEN_EXP_SECONDS = 60 * 15

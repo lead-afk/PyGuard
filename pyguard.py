@@ -987,7 +987,10 @@ def get_used_ips(interface: str) -> list[str]:
     """
     ensure_root()
     data = load_data(interface)
-    return [peer["ip"] for peer in data["peers"].values()]
+    used = [peer.get("ip") for peer in data["peers"].values()]
+    failsafe_ip = ipaddress.ip_network(data.get("server", {}).get("network")).hosts().__next__().exploded
+    used.append(data.get("server", {}).get("ip", failsafe_ip))
+    return used
 
 
 def check_new_peer(
@@ -1027,7 +1030,7 @@ def check_new_peer(
     elif (
         not (
             ipaddress.ip_address(peer_ip)
-            in ipaddress.ip_network(data["server"]["network"])
+            in ipaddress.ip_network(data.get("server", {}).get("network", "255.255.255.255/32"))
         )
         and not ignore_ip
     ):
