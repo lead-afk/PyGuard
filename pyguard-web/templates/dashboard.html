@@ -2891,8 +2891,10 @@
         overlay.addEventListener("click", (e) => {
           if (e.target === overlay) close();
         });
-        btnLogout.onclick = () => {
-          window.location.href = anchor?.href || "/logout";
+        btnLogout.onclick = async () => {
+          await fetch("/logout", { method: "POST" }).then(() => {
+              window.location.href = "/login";
+          });
         };
       }
       if (logoutLink) {

@@ -54,8 +54,8 @@ DATA_DIR = Path("/etc/pyguard")
 ADMIN_PASS_HASH_PATH = DATA_DIR / "admin.pass.hash"
 ADMIN_PASS_HASH = ""
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret_key_change_me")
-ACCESS_EXP_SECONDS = 60 * 15
-REFRESH_EXP_SECONDS = 60 * 60 * 24
+ACCESS_TOKEN_EXP_SECONDS = 60 * 15
+REFRESH_TOKEN_EXP_SECONDS = 60 * 60 * 24
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("pyguard-api")
@@ -218,7 +218,7 @@ def _issue_access_token(user_data) -> str:
     now = datetime.now(timezone.utc)
     payload = {    
         "iat": now,
-        "exp": now + timedelta(seconds=ACCESS_EXP_SECONDS),
+        "exp": now + timedelta(seconds=ACCESS_TOKEN_EXP_SECONDS),
         "type": "access",
         "user": user_data
     }
@@ -228,7 +228,7 @@ def _issue_refresh_token(user_data) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "iat": now,
-        "exp": now + timedelta(seconds=REFRESH_EXP_SECONDS),
+        "exp": now + timedelta(seconds=REFRESH_TOKEN_EXP_SECONDS),
         "type": "refresh",
         "user": user_data
     }
@@ -277,7 +277,7 @@ def login(req: LoginReq):
     return {
         "access_token": token,
         "token_type": "bearer",
-        "expires_in": ACCESS_EXP_SECONDS,
+        "expires_in": ACCESS_TOKEN_EXP_SECONDS,
         "refresh_token": refresh,
     }
 
@@ -290,14 +290,14 @@ def refresh(req: RefreshReq):
             raise HTTPException(status_code=403, detail="Wrong token type")
     except:
         raise HTTPException(status_code=403, detail="Invalid refresh token")
-
-    token = _issue_access_token(payload.user)
-    refresh = _issue_refresh_token(payload.user)
+    
+    token = _issue_access_token(payload.get("user"))
+    refresh = _issue_refresh_token(payload.get("user"))
 
     return {
         "access_token": token,
         "token_type": "bearer",
-        "expires_in": ACCESS_EXP_SECONDS,
+        "expires_in": ACCESS_TOKEN_EXP_SECONDS,
         "refresh_token": refresh,
     }
 
