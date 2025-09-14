@@ -261,12 +261,14 @@ except (
 
 
 def get_users_file_path() -> Path:
-    path = os.getenv("PYGUARD_USERS_PATH", "invalid_users_path")
+    # path = os.getenv("PYGUARD_USERS_PATH", "invalid_users_path")
+    path = os.path.join(BASE_DATA_DIR, "users.json")
     return Path(path)
 
 
 def load_users_data() -> dict:
     users_path = get_users_file_path()
+    print("Using users data file:", users_path)
     if not users_path.exists():
         return {}
     try:
@@ -280,6 +282,7 @@ def load_users_data() -> dict:
 def find_user_in_file(username: str) -> str | None:
     data = load_users_data()
     for user in data.get("admin_users", []):
+        print("Checking user:", user.get("username"))
         if user.get("username") == username:
             return user
 
@@ -329,8 +332,8 @@ def validate_registered_user(username: str, password: str) -> bool:
     if not user:
         print("User not found:", username)
         raise HTTPException(status_code=401, detail="User not registered")
-
     user_hashed_password = user.get("password_hash")
+    print("user_hashed_password:", user_hashed_password)
     if not verify_password(password, user_hashed_password):
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
