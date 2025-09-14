@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Simple pyguard API starter
 
 Provides a /login endpoint which accepts JSON {username,password} and, on

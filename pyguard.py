@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sys
 import os
 import json
@@ -458,6 +459,7 @@ def load_data(interface: str) -> dict:
         },
         "peers": {},
         "launch_on_start": False,
+        "dns_enabled": False,
     }
 
     ensure_directories()
@@ -476,6 +478,7 @@ def load_data(interface: str) -> dict:
         server.setdefault("interface", interface)
         data.setdefault("peers", {})
         data.setdefault("launch_on_start", False)
+        data.setdefault("dns_enabled", False)
         return data
     except json.JSONDecodeError:
         print(f"Error: state file for {interface} is corrupted ({path})")
@@ -1613,12 +1616,18 @@ def generate_peer_config(interface: str, name: str) -> str | None:
         return None
     peer = data["peers"][name]
     server = data["server"]
+
+    if data.get("dns_enabled", False):
+        dns_ip = server.get("ip")
+    else:
+        dns_ip = server.get("dns", "1.1.1.1")
+
     client_allowed_ips = peer.get("allowed_ips") or server["network"]
     endpoint_host = server.get("public_ip") or "<SERVER_PUBLIC_IP>"
     return f"""[Interface]
 PrivateKey = {peer['private_key']}
 Address = {peer['ip']}/{server['network'].split('/')[1]}
-DNS = {server['dns']}
+DNS = {dns_ip}
 
 [Peer]
 PublicKey = {server['public_key']}
@@ -1858,6 +1867,9 @@ def start_wireguard(interface: str):
         Generates configuration and starts the interface using wg-quick.
         Ensures the latest configuration is applied before starting.
     """
+    if is_interface_active(interface):
+        print(f"Interface '{interface}' is already active")
+        return
     ensure_root()
     data = load_data(interface)
     generate_config(interface, data)
@@ -2010,6 +2022,16 @@ def update_config(interface: str, target: str, parameter: str, value: str):
         save_data(interface, data)
         print(f"Public endpoint set: {value}")
         # generate_config(interface, data)
+        return
+    if target == "dns-service":
+        if value.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
+            data["dns_enabled"] = True
+            print("DNS service enabled (peer configs will use server IP as DNS)")
+        else:
+            data["dns_enabled"] = False
+            print("DNS service disabled (peer configs will use custom DNS)")
+        save_data(interface, data)
+        generate_config(interface, data, non_critical_change=True)
         return
 
     # Regenerate for consistency (even if public_ip not used in server config yet)
@@ -2303,6 +2325,16 @@ def main():
                 return
             new_name = args[0]
             rename_interface(interface, new_name)
+        elif command == "dns-service":
+            if not args:
+                print("Usage: pyguard <iface> dns-service <enable|disable>")
+                return
+            val = args[0]
+            if val.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
+                update_config(interface, "dns-service", "dns-service", "enable")
+            else:
+                update_config(interface, "dns-service", "dns-service", "disable")
+
         elif command == "custom":
             if len(args) < 2:
                 print(

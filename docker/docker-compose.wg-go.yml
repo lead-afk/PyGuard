@@ -15,6 +15,7 @@ services:
     ports:
       - "6656:6656/tcp"
       - "51825:51825/udp"
+      - "54:53/udp"
     #volumes:
     #  - ../data/pyguard:/etc/pyguard
     #  - ../data/wireguard:/etc/wireguard

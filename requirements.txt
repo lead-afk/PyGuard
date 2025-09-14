@@ -10,3 +10,5 @@ psutil
 aiofiles
 python-dotenv
 cryptography
+watchdog
+dnslib

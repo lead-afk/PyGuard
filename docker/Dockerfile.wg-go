@@ -26,6 +26,7 @@ COPY pyguard.py pyguard-api.py ./
 COPY pyguard-web/templates ./pyguard-web/templates
 COPY pyguard-web/static ./pyguard-web/static
 COPY scripts/reset-admin.py ./scripts/reset-admin.py
+COPY pyguard-dns.py ./pyguard-dns.py
 
 # Directories for state & logs
 RUN mkdir -p /etc/pyguard /etc/wireguard /var/log/pyguard /etc/supervisor/conf.d
@@ -34,6 +35,6 @@ COPY docker/entrypoint-wg-go.sh /entrypoint.sh
 COPY docker/supervisord.conf /etc/supervisor/conf.d/pyguard.conf
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 6656/tcp 51820/udp
+EXPOSE 6656/tcp 51820/udp 53/udp
 ENTRYPOINT ["/usr/bin/tini","--"]
 CMD ["/entrypoint.sh"]
