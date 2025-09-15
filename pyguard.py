@@ -90,6 +90,14 @@ def load_settings():
 
     return settings
 
+def yellow(text):
+    return f"\033[93m{text}\033[0m"
+
+def red(text):
+    return f"\033[91m{text}\033[0m"
+
+def green(text):
+    return f"\033[92m{text}\033[0m"
 
 def ensure_root():
     """Exit if not root on POSIX systems (WireGuard + file permissions require root).
@@ -1033,6 +1041,9 @@ def ensure_launcher_service():
         based on their saved configuration. It uses the current script path.
     """
     ensure_root()
+    if os.getenv("PYGUARD_IN_DOCKER") == "1":
+        # Skip creating launcher service inside containerized environments
+        return
     if not command_exists("systemctl"):
         print("systemctl not found, cannot create launcher service")
         return
@@ -2224,57 +2235,107 @@ def help():
     txt = """
 PyGuard - WireGuard VPN Manager (interface-first CLI)
 
-Usage:
-  pyguard help|--help|-h
-      Show this help.
+Top‑Level Commands:
+  pyguard help | --help | -h
+      Show this help text.
 
   pyguard list [--json]
-      List interfaces managed by PyGuard.
+      List all interfaces with summary information.
 
   pyguard init [<iface>] [--port N] [--network CIDR] [--public-ip HOST]
-      Initialize server config. Sensible defaults are auto-selected (free name/port/network).
+      Initialize a new interface (auto-picks a free name/port/network if omitted).
+      Examples:
+        pyguard init                 # auto choose (wg0 / free port / 10.x.x.0/24)
+        pyguard init wg3 --port 51823 --network 10.23.40.0/24 --public-ip vpn.example.com
 
-  pyguard <iface> start|stop|status
-      Manage WireGuard interface via wg-quick.
+  pyguard delete <iface> [<iface2> ...]
+      Delete one or more interfaces (state + generated config + systemd service).
 
-  pyguard <iface> enable|disable
-      Enable/disable systemd oneshot service pyguard-<iface>.service.
+  pyguard launchAll
+      Start every interface that has launch_on_start=True (same as enabling each service then running them).
 
-  pyguard <iface> add <peer> [<ip>]
-  pyguard <iface> remove <peer|index>
+  pyguard stopAll
+      Stop all interfaces that are currently active.
+
+Interface Lifecycle:
+  pyguard <iface> start | stop | status
+      Start/stop the WireGuard interface (wg-quick) or show runtime status (peers, transfer, endpoints).
+
+  pyguard <iface> enable | disable
+      Enable/disable the systemd oneshot service (pyguard-<iface>.service) and set launch_on_start True/False.
+
+  pyguard <iface> rename <NEW_NAME>
+      Rename interface (state file + wireguard config + service unit if present).
+
+Peer Management:
+  pyguard <iface> add <peer_name> [<ip>]
+      Add a new peer; optional static IP (must be inside interface network). If not provided next free IP is used.
+
+  pyguard <iface> remove <peer_name|index>
+      Remove peer by its name or numeric index (index from 'pyguard <iface> list').
+
   pyguard <iface> list [--json]
-      Manage or list peers for an interface.
+      List peers with their IP, latest handshake, endpoints, and bytes transferred.
 
+Viewing Config / Export:
   pyguard <iface> show server [--json]
-  pyguard <iface> show <peer> [--save|--qr|--save-qr|--json]
-      Show server or peer/client configuration.
+      Display server config (runtime + static). JSON form includes peers summary.
 
+  pyguard <iface> show <peer> [--save|--qr|--save-qr|--json]
+      Show a peer's client config; optionally save to file (--save), render terminal QR (--qr), also save PNG (--save-qr), or emit JSON.
+
+Server Updates (update <server-param> <value>):
   pyguard <iface> update port <N>
   pyguard <iface> update dns <IP>
   pyguard <iface> update public-ip <HOST|IP>
   pyguard <iface> update network <CIDR>
-  pyguard <iface> rename <NEW_NAME>
+      Modify core server attributes and regenerate wireguard config (non‑destructive to peers).
+
+Peer Updates (update <peer> <param> <value>):
   pyguard <iface> update <peer> allowed-ips <CIDR>
   pyguard <iface> update <peer> rename <NEW_NAME>
-  pyguard <iface> update <peer> rotate-keys
   pyguard <iface> update <peer> ip <NEW_IP>
-      Update server or peer settings.
+  pyguard <iface> update <peer> rotate-keys | rotate | regen-keys
+      Adjust individual peer settings or rotate its keypair.
 
+Service / Feature Toggles:
+  pyguard <iface> dns_service <enable|disable>
+      Toggle built‑in lightweight DNS forwarding for peers (flag stored in state: dns_service).
 
-  pyguard <iface> custom add up|down <cmd>
+  pyguard <iface> allow_vpn_gateway <enable|disable>
+      Allow peers to use this server as a full traffic gateway (sets allow_vpn_gateway flag; influences PostUp rules / config build).
+
+  pyguard <iface> forward_to_docker_bridge <enable|disable>
+      Makes traffic destined for interface relay be forwarded to the host's docker bridge, essentially allowing peers to access other services on the host.
+      Don't use this outside container!
+
+Custom PostUp / PostDown Hooks:
+  pyguard <iface> custom add up|down <command>
   pyguard <iface> custom list up|down
   pyguard <iface> custom delete up|down <index|command>
-      Manage PostUp / PostDown hook commands.
+      Manage additional commands executed after interface up or before down.
 
+Interface Deletion:
   pyguard <iface> delete interface
-      Remove state, generated config, and service for <iface>.
+      Delete interface state, wireguard config file, and disable/remove service unit.
+
+Examples:
+  pyguard init wg5 --port 51823 --network 10.23.50.0/24
+  pyguard wg5 add phone
+  pyguard wg5 show phone --qr
+  pyguard wg5 update port 51824
+  pyguard wg5 update phone rotate-keys
+  pyguard wg5 dns_service enable
+  pyguard launchAll
 
 Notes:
   - State files: /etc/pyguard/<iface>.conf (JSON)
   - WireGuard configs: /etc/wireguard/<iface>.conf
-  - Client QR/PNG output requires 'qrencode' to be installed.
-  - If public endpoint isn't set, client configs include <SERVER_PUBLIC_IP> placeholder.
-  - Server IP defaults to the first host in the configured network.
+  - launch_on_start flag is toggled by 'enable'/'disable'; launchAll starts only those interfaces.
+  - Client QR / PNG output requires 'qrencode'.
+  - Public endpoint left unset inserts <SERVER_PUBLIC_IP> placeholder in generated peer configs.
+  - Server IP defaults to first host of its configured network.
+  - Use rotate-keys to regenerate peer key while preserving IP/AllowedIPs.
 """.strip()
     print(txt)
 
@@ -2416,6 +2477,14 @@ def main():
             new_name = args[0]
             rename_interface(interface, new_name)
         elif command == "dns_service":
+            if not os.getenv("PYGUARD_IN_DOCKER") == "1" and not "-y" in args:
+                print(red("Warning! DNS service is intended for Docker use only!"))
+                print(yellow("It may interfere with existing DNS on the host."))
+                print(yellow("It will very likely not even start outside Docker."))
+                confirm = input("Are you sure? Type 'yes' to continue: ")
+                if confirm.lower() != "yes":
+                    print("Aborted.")
+                    return
             if not args:
                 print("Usage: pyguard <iface> dns_service <enable|disable>")
                 return
@@ -2424,7 +2493,39 @@ def main():
                 update_config(interface, "dns_service", "dns_service", "enable")
             else:
                 update_config(interface, "dns_service", "dns_service", "disable")
-
+        elif command == "forward_to_docker_bridge":
+            if not "-y" in args and not os.getenv("PYGUARD_IN_DOCKER") == "1":
+                ip, name = get_local_gateway()
+                print(red("Warning this will likely break stuff outside of Docker!"))
+                print(yellow(f"All trafic destined for the WireGuard interface relay will be forwarded to {ip} the {name}, probably the ISP router which will drop the packets."))
+                print(yellow("It is only useful if you run PyGuard inside Docker and want to access other containers on the host."))
+                print(yellow("Can potentially be used on a non-Docker host if you want to hide the interface relay (UNTESTED)."))
+                confirm = input("Are you sure? Type 'yes' to continue: ")
+                if confirm.lower() != "yes":
+                    print("Aborted.")
+                    return
+            if not args:
+                print("Usage: pyguard <iface> forward_to_docker_bridge <enable|disable>")
+                return
+            val = args[0]
+            if val.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
+                update_config(
+                    interface, "forward_to_docker_bridge", "forward_to_docker_bridge", "enable"
+                )
+            else:
+                update_config(
+                    interface, "forward_to_docker_bridge", "forward_to_docker_bridge", "disable"
+                )
+        elif command == "allow_vpn_gateway":
+            if not args:
+                print("Usage: pyguard <iface> allow_vpn_gateway <enable|disable>")
+                return
+            val = args[0]
+            if val.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
+                update_config(interface, "allow_vpn_gateway", "allow_vpn_gateway", "enable")
+            else:
+                update_config(interface, "allow_vpn_gateway", "allow_vpn_gateway", "disable")
+        
         elif command == "custom":
             if len(args) < 2:
                 print(
