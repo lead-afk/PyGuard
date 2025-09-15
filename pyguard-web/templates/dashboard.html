@@ -947,18 +947,29 @@
       }
       /* Pulsing glow to draw attention to Enable button when interface inactive */
       @keyframes enablePulse {
-        0% { box-shadow: 0 0 0 0 rgba(95,180,255,0.55), 0 0 6px 2px rgba(95,180,255,0.35); }
-        50% { box-shadow: 0 0 0 10px rgba(95,180,255,0), 0 0 14px 5px rgba(95,180,255,0.7); }
-        100% { box-shadow: 0 0 0 0 rgba(95,180,255,0), 0 0 4px 1px rgba(95,180,255,0.35); }
+        0% {
+          box-shadow: 0 0 0 0 rgba(95, 180, 255, 0.55),
+            0 0 6px 2px rgba(95, 180, 255, 0.35);
+        }
+        50% {
+          box-shadow: 0 0 0 10px rgba(95, 180, 255, 0),
+            0 0 14px 5px rgba(95, 180, 255, 0.7);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(95, 180, 255, 0),
+            0 0 4px 1px rgba(95, 180, 255, 0.35);
+        }
       }
       .btn-enable-pulse {
         position: relative;
         animation: enablePulse 2.5s ease-in-out infinite;
-        background: linear-gradient(135deg,#1d4260,#1c5d7a);
+        background: linear-gradient(135deg, #1d4260, #1c5d7a);
         color: #e1f6ff !important;
         border: 1px solid #2d6f8f !important;
       }
-      .btn-enable-pulse:hover { background: linear-gradient(135deg,#205072,#217da0); }
+      .btn-enable-pulse:hover {
+        background: linear-gradient(135deg, #205072, #217da0);
+      }
     </style>
   </head>
   <body>
@@ -1512,6 +1523,9 @@
           if (typeof data["allow_vpn_gateway"] !== "undefined") {
             s["allow_vpn_gateway"] = data["allow_vpn_gateway"];
           }
+          if (typeof data["gateway_name"] !== "undefined") {
+            window.PYGUARD_GATEWAY_NAME = data["gateway_name"];
+          }
           if (typeof data.PYGUARD_IN_DOCKER !== "undefined") {
             window.PYGUARD_IN_DOCKER = data.PYGUARD_IN_DOCKER ? 1 : 0;
             try {
@@ -1548,7 +1562,7 @@
             if (disableBtn && !isActive) {
               disableBtn.classList.remove("btn-enable-pulse");
             }
-          } catch(_) {}
+          } catch (_) {}
           let peersData = data.peers || {};
           if (typeof peersData === "string") {
             try {
@@ -2734,6 +2748,9 @@
               if (typeof nd["allow_vpn_gateway"] !== "undefined") {
                 s["allow_vpn_gateway"] = nd["allow_vpn_gateway"];
               }
+              if (typeof nd["gateway_name"] !== "undefined") {
+                window.PYGUARD_GATEWAY_NAME = nd["gateway_name"];
+              }
               if (typeof updPayload.forward_to_docker_bridge !== "undefined") {
                 s.forward_to_docker_bridge =
                   updPayload.forward_to_docker_bridge;
@@ -2743,6 +2760,9 @@
               }
               if (typeof updPayload["allow_vpn_gateway"] !== "undefined") {
                 s["allow_vpn_gateway"] = updPayload["allow_vpn_gateway"];
+              }
+              if (typeof updPayload["gateway_name"] !== "undefined") {
+                window.PYGUARD_GATEWAY_NAME = updPayload["gateway_name"];
               }
               if (typeof nd.PYGUARD_IN_DOCKER !== "undefined") {
                 window.PYGUARD_IN_DOCKER = nd.PYGUARD_IN_DOCKER ? 1 : 0;
@@ -2773,7 +2793,7 @@
                   if (!isActive) enableBtn.classList.add("btn-enable-pulse");
                   else enableBtn.classList.remove("btn-enable-pulse");
                 }
-              } catch(_) {}
+              } catch (_) {}
               // stats
               const peerCount =
                 nd.peer_count ?? (nd.peers ? Object.keys(nd.peers).length : 0);
@@ -3562,6 +3582,12 @@
         const i = iface || "<iface>";
         const fwCmd1 = `ufw allow ${p}/udp`;
         const fwCmd2 = `ufw route allow in on ${i} out on ${i}`;
+        const gwName =
+          typeof window !== "undefined" && window.PYGUARD_GATEWAY_NAME
+            ? window.PYGUARD_GATEWAY_NAME
+            : "<gateway>";
+        const fwCmdGW1 = `ufw route allow in on ${i} out on ${gwName}`;
+        const fwCmdGW2 = `ufw route allow in on ${gwName} out on ${i}`;
         const id1 = `pgc_${Date.now()}_${Math.random()
           .toString(36)
           .slice(2, 7)}`;
@@ -3571,12 +3597,35 @@
         const id3 = `pgc_${Date.now()}_${Math.random()
           .toString(36)
           .slice(2, 7)}`; // sysctl block
-        // If running inside Docker, append a snippet recommending exposing the port in docker-compose
-        const dockerSection =
-          typeof window !== "undefined" && window.PYGUARD_IN_DOCKER === 1
-            ? `\n    <hr style="border:none;border-top:1px solid #21343c;margin:12px 0;"/>\n    <div style="font-size:13px;color:#cfd8dc;line-height:1.4;">\n      <div style="margin-bottom:6px;">Detected Docker mode: ensure your container exposes the WireGuard UDP port for this interface. Example docker-compose snippet:</div>\n      <div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="docker_compose_${id1}">Copy</button><code id="docker_compose_${id1}">ports:\n  - "6656:6656/tcp"\n  - "${p}:${p}/udp"</code></div>\n      <div style="margin-top:6px;font-size:11px;color:#90a4ae;">Replace <code>${p}</code> with the WireGuard port for this interface if different. Also ensure the container has the NET_ADMIN capability and /dev/net/tun mapped.</div>\n    </div>`
+        const inDocker =
+          typeof window !== "undefined" && window.PYGUARD_IN_DOCKER === 1;
+        let bodyContent = "";
+        if (inDocker) {
+          // Docker mode: concise version without gateway note
+          bodyContent = `\n    <div style=\"font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;\">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready inside the container. Key steps:</div>\n      <ol style=\"margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;\">\n        <li><b>Expose UDP port:</b><div style=\"margin-top:6px;\">Ensure container mapping host:${p} → container:${p} (compose snippet below). Upstream router / cloud SG must also allow/forward UDP <b>${p}</b>.</div><div class=\"pg-code-block pg-copy-wrap\"><button class=\"pg-copy-btn\" data-target=\"docker_compose_${id1}\">Copy</button><code id=\"docker_compose_${id1}\">ports:\n  - \"6656:6656/tcp\"\n  - \"${p}:${p}/udp\"</code></div></li>\n        <li><b>Edge & firewall allows:</b><div style=\"margin-top:6px;\">Public IP (or port‑forward) + cloud security group / router + host firewall must all permit inbound UDP <b>${p}</b>. Missing any layer breaks connectivity.</div></li>\n      </ol>\n      <div style=\"font-size:11px;color:#78909c;\">Host firewall tools run outside the container; ensure <code>NET_ADMIN</code> & <code>/dev/net/tun</code> are configured in compose/run args.</div>\n    </div>`;
+        } else {
+          // Normal (non-docker) mode: show UFW + sysctl guidance; optionally gateway NAT rules
+          const allowGW = !!(
+            currentServer &&
+            (currentServer.allow_vpn_gateway ||
+              currentServer["allow_vpn_gateway"])
+          );
+          const id4 = `pgc_${Date.now()}_${Math.random()
+            .toString(36)
+            .slice(2, 7)}`;
+          const id5 = `pgc_${Date.now()}_${Math.random()
+            .toString(36)
+            .slice(2, 7)}`;
+          const gwExtra = allowGW
+            ? `\n        <li><b>Allow VPN gateway egress (peer → Internet) routing:</b><div style=\"margin-top:6px;\">When 'Allow VPN gateway' is enabled peers sending 0.0.0.0/0 (or broader) through the tunnel need host firewall forward allowances between the WireGuard interface <code>${i}</code> and the upstream gateway <code>${gwName}</code>:</div><div class=\"pg-code-block pg-copy-wrap\"><button class=\"pg-copy-btn\" data-target=\"${id4}\">Copy</button><code id=\"${id4}\">${fwCmdGW1}</code></div><div class=\"pg-code-block pg-copy-wrap\"><button class=\"pg-copy-btn\" data-target=\"${id5}\">Copy</button><code id=\"${id5}\">${fwCmdGW2}</code></div><div style=\"margin-top:6px;font-size:11px;color:#90a4ae;\">These ensure forwarded packets can traverse from VPN peers out to the Internet and return. Replace <code>${gwName}</code> if your default gateway device differs.</div></li>`
             : "";
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" style="max-width:640px;" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="ismClose" aria-label="Close">×</button>\n    <h3 style="margin-top:0;">${heading}</h3>\n    <div style="font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready. To ensure full connectivity and proper WireGuard operation, review the recommended system steps below.</div>\n      <ol style="margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;">\n        <li>To allow for WireGuard traffic port <b>${p}</b> must be open and publicly reachable end-to-end (host firewall, upstream router/NAT, cloud security group):<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id1}">Copy</button><code id="${id1}">${fwCmd1}</code></div>For peer-to-peer routing between clients:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id2}">Copy</button><code id="${id2}">${fwCmd2}</code></div><div style="margin-top:6px;font-size:11px;color:#90a4ae;">These commands plus external firewall/NAT rules ensure peers can reach the interface.</div></li>\n        <li>Enable packet forwarding system-wide:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id3}">Copy</button><code id="${id3}">sysctl -w net.ipv4.ip_forward=1\n# (optional IPv6)\nsysctl -w net.ipv6.conf.all.forwarding=1</code></div><span style="display:block;margin-top:4px;">Persist in /etc/sysctl.conf for reboot survival.</span></li>\n      </ol>\n    </div>${dockerSection}\n    <div class="pm-actions" style="margin-top:18px;justify-content:flex-end;gap:10px;">\n      <button type="button" id="ismApplyRules" class="btn-glow pg-fixed-btn" style="background:#1f3a4d;">Apply Rules</button>\n      <button type="button" id="ismUnderstand" class="btn-glow">I Understand</button>\n    </div>\n  </div>\n</div>`;
+          bodyContent = `\n    <div style=\"font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;\">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready. To ensure full connectivity and proper WireGuard operation, review the recommended system steps below.</div>\n      <ol style=\"margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;\">\n        <li><b>Expose and authorize the WireGuard UDP port; then allow intra-peer routing:</b><div style=\"margin-top:6px;\">First open the UDP port locally (host firewall) and permit routed traffic between peers on the interface:</div><div class=\"pg-code-block pg-copy-wrap\"><button class=\"pg-copy-btn\" data-target=\"${id1}\">Copy</button><code id=\"${id1}\">${fwCmd1}</code></div><div class=\"pg-code-block pg-copy-wrap\"><button class=\"pg-copy-btn\" data-target=\"${id2}\">Copy</button><code id=\"${id2}\">${fwCmd2}</code></div><div style=\"margin-top:6px;font-size:11px;color:#90a4ae;\">For peer-to-peer connectivity across the Internet the relay host must have a publicly reachable IP <i>or</i> a stable router/NAT port‑forward mapping UDP <b>${p}</b> to this machine. Without that only LAN / privately routed peers can connect. Also adjust cloud security groups / upstream firewalls accordingly.</div></li>\n        <li><b>Enable packet forwarding (kernel):</b><div class=\"pg-code-block pg-copy-wrap\"><button class=\"pg-copy-btn\" data-target=\"${id3}\">Copy</button><code id=\"${id3}\">sysctl -w net.ipv4.ip_forward=1\n# (optional IPv6)\nsysctl -w net.ipv6.conf.all.forwarding=1</code></div><span style=\"display:block;margin-top:4px;\">Persist via /etc/sysctl.conf if desired.</span></li>${gwExtra}\n      </ol>\n    </div>`;
+        }
+        return `\n<div class=\"peer-modal-overlay\">\n  <div class=\"peer-modal\" style=\"max-width:640px;\" role=\"dialog\" aria-modal=\"true\">\n    <button class=\"peer-modal-close\" id=\"ismClose\" aria-label=\"Close\">×</button>\n    <h3 style=\"margin-top:0;\">${heading}</h3>${bodyContent}\n    <div class=\"pm-actions\" style=\"margin-top:18px;justify-content:flex-end;gap:10px;\">\n      ${
+          inDocker
+            ? ""
+            : '<button type="button" id="ismApplyRules" class="btn-glow pg-fixed-btn" style="background:#1f3a4d;">Apply Rules</button>'
+        }\n      <button type=\"button\" id=\"ismUnderstand\" class=\"btn-glow\">I Understand</button>\n    </div>\n  </div>\n</div>`;
       }
       function showInterfaceSuccess(kind, iface, port) {
         if (!interfaceSuccessMount) return;
@@ -3614,6 +3663,22 @@
                 `${apiBase}/shell/route/${encodeURIComponent(applyIface)}`,
                 { method: "POST", headers: headers() }
               );
+              try {
+                if (
+                  currentServer &&
+                  (currentServer.allow_vpn_gateway ||
+                    currentServer["allow_vpn_gateway"])
+                ) {
+                  await fetchJSON(
+                    `${apiBase}/shell/route_vpn_gateway/${encodeURIComponent(
+                      applyIface
+                    )}`,
+                    { method: "POST", headers: headers() }
+                  );
+                }
+              } catch (_e) {
+                /* non-fatal */
+              }
               btnApply.textContent = "Applied";
               showToast("Rules applied");
               setTimeout(() => {

@@ -769,8 +769,7 @@ def get_next_ip(interface: str, custom_network: str = None):
     raise Exception("No available IPs in the network")
 
 
-def get_docker_bridge():  # TODO  what if in docker but network mode is host?
-    private = ipaddress.ip_network("172.16.0.0/12")
+def get_local_gateway():  # TODO  what if in docker but network mode is host?
     result = subprocess.run(
         ["ip", "route"],
         capture_output=True,
@@ -785,17 +784,13 @@ def get_docker_bridge():  # TODO  what if in docker but network mode is host?
             parts = line.split()
             try:
                 gateway = ipaddress.ip_address(parts[2])
-                print(f"Detected docker bridge IP: {gateway}")
-                if gateway in private:
-                    return str(gateway)
-                else:
-                    print(
-                        f"Warning: detected gateway {gateway} is not in the expected docker bridge range (<172.16.0.0/12>)"
-                    )
+                name = parts[4]
+                print(f"Detected local gateway IP: {gateway}")
+                return str(gateway), str(name)
             except Exception:
                 continue
     print("Warning: could not determine docker bridge IP, defaulting to 172.16.0.1")
-    return "172.16.0.1"
+    return "172.16.0.1", "not-found"
 
 
 def get_used_network_names():
@@ -1404,7 +1399,7 @@ ListenPort = {data['server']['port']}
         )
 
     if data.get("forward_to_docker_bridge"):
-        ip = get_docker_bridge()
+        ip, _ = get_local_gateway()
         if not (os.getenv("PYGUARD_IN_DOCKER") == "1"):
             print("This is not running inside a Docker container.")
 

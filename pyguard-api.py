@@ -671,7 +671,12 @@ def api_init_interface(req: InitInterfaceReq, _=Depends(require_jwt)):
         "active": is_interface_active(req.interface),
     }
     print("Successful initialization of interface:", req.interface)
-    return {"interface": req.interface, "interfaces": data, "new_data": resp}
+    return {
+        "interface": req.interface,
+        "interfaces": data,
+        "new_data": resp,
+        "gateway_name": get_local_gateway()[1],
+    }
 
 
 @app.get("/interfaces/{interface}")
@@ -705,6 +710,7 @@ def api_get_interface(interface: str, _=Depends(require_jwt)):
         "PYGUARD_IN_DOCKER": os.getenv("PYGUARD_IN_DOCKER") == "1",
         "dns_service": d.get("dns_service", False),
         "allow_vpn_gateway": d.get("allow_vpn_gateway", False),
+        "gateway_name": get_local_gateway()[1],
     }
     return resp
 
@@ -827,6 +833,7 @@ def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jw
         "interfaces": data,
         "new_data": resp,
         "something_changed": something_changed,
+        "gateway_name": get_local_gateway()[1],
     }
 
 
@@ -836,6 +843,14 @@ def api_get_next_available_ip(interface: str, _=Depends(require_jwt)):
     if not next:
         raise HTTPException(status_code=404, detail="No available IP found")
     return {"interface": interface, "next_available_ip": next}
+
+
+@app.get("/info/default_gateway")
+def api_get_default_gateway(_=Depends(require_jwt)):
+    ip, name = get_local_gateway()
+    if not ip or not name:
+        raise HTTPException(status_code=404, detail="No gateway found")
+    return {"gateway_ip": ip, "gateway_name": name}
 
 
 @app.get("/interfaces/{interface}/peers")
@@ -953,6 +968,41 @@ def api_allow_route(interface: str, _=Depends(require_jwt)):
     )
 
     return {"interface": interface}
+
+
+@app.post("/shell/route_vpn_gateway/{interface}", status_code=201)
+def api_allow_route_vpn_gateway(interface: str, _=Depends(require_jwt)):
+
+    settings = load_settings()
+    if not settings.get("allow_command_apply"):
+        raise HTTPException(
+            status_code=403,
+            detail="Command application is not allowed, enable it in settings",
+        )
+
+    ensure_root()
+
+    if not command_exists("ufw"):
+        raise HTTPException(status_code=400, detail="ufw command not found")
+
+    gateway_ip, gateway_name = get_local_gateway()
+    if not gateway_ip:
+        raise HTTPException(status_code=400, detail="No gateway found")
+
+    subprocess.run(
+        ["ufw", "route", "allow", "in", "on", interface, "out", "on", gateway_name],
+        check=True,
+    )
+    subprocess.run(
+        ["ufw", "route", "allow", "in", "on", gateway_name, "out", "on", interface],
+        check=True,
+    )
+
+    return {
+        "interface": interface,
+        "gateway_name": gateway_name,
+        "gateway_ip": gateway_ip,
+    }
 
 
 @app.post("/interfaces/{interface}/peers", status_code=201)
