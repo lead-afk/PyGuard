@@ -230,17 +230,17 @@ def cors_test():
     return {"ok": True, "message": "CORS reachable"}
 
 
-@app.get("/")
-def root_status(request: Request):
-    return {
-        "service": "pyguard-api",
-        "cors": {
-            "allow_origins": _allow_origins,
-            "allow_origin_regex": _allow_origin_regex,
-            "request_origin": request.headers.get("origin"),
-        },
-        "status": "ok",
-    }
+# @app.get("/")
+# def root_status(request: Request):
+#     return {
+#         "service": "pyguard-api",
+#         "cors": {
+#             "allow_origins": _allow_origins,
+#             "allow_origin_regex": _allow_origin_regex,
+#             "request_origin": request.headers.get("origin"),
+#         },
+#         "status": "ok",
+#     }
 
 
 def generate_fernet_key(secret_key: str) -> bytes:
@@ -564,11 +564,15 @@ class UpdateServerReq(BaseModel):
     dns: str | None = None
     public_ip: str | None = None
     network: str | None = None
+    forward_to_docker_bridge: bool | None = None
+    dns_service: bool | None = None
 
     old_port: int | None = None
     old_dns: str | None = None
     old_public_ip: str | None = None
     old_network: str | None = None
+    old_forward_to_docker_bridge: bool | None = None
+    old_dns_service: bool | None = None
 
 
 class AddPeerReq(BaseModel):
@@ -624,7 +628,10 @@ def _filter_server(server: dict, include_private: bool = False) -> dict:
 @app.get("/interfaces")
 def api_list_interfaces(_=Depends(require_jwt)):
     data = list_interfaces()
-    return {"interfaces": data}
+    return {
+        "interfaces": data,
+        "PYGUARD_IN_DOCKER": os.getenv("PYGUARD_IN_DOCKER") == "1",
+    }
 
 
 @app.get("/interfaces/defaults")
@@ -692,6 +699,9 @@ def api_get_interface(interface: str, _=Depends(require_jwt)):
         "peers": peers_obj,
         "peer_count": len(peers_obj) if peers_obj else len(d.get("peers", {})),
         "active": is_interface_active(interface),
+        "forward_to_docker_bridge": d.get("forward_to_docker_bridge", False),
+        "PYGUARD_IN_DOCKER": os.getenv("PYGUARD_IN_DOCKER") == "1",
+        "dns-service": d.get("dns-service", False),
     }
     return resp
 
@@ -758,6 +768,20 @@ def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jw
     if req.network is not None and req.network != req.old_network:
         update_config(interface, "network", "network", req.network)
         something_changed = True
+    if (
+        req.forward_to_docker_bridge is not None
+        and req.forward_to_docker_bridge != req.old_forward_to_docker_bridge
+    ):
+        update_config(
+            interface,
+            "forward-to-docker-bridge",
+            "forward-to-docker-bridge",
+            str(req.forward_to_docker_bridge),
+        )
+        something_changed = True
+    if req.dns_service is not None and req.dns_service != req.old_dns_service:
+        update_config(interface, "dns-service", "dns-service", str(req.dns_service))
+        something_changed = True
 
     if req.name is not None and interface != req.name:
         rename_interface(interface, req.name)
@@ -779,6 +803,8 @@ def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jw
         "peers": peers_obj,
         "peer_count": len(peers_obj) if peers_obj else len(d.get("peers", {})),
         "active": is_interface_active(interface),
+        "forward_to_docker_bridge": d.get("forward_to_docker_bridge", False),
+        "dns-service": d.get("dns-service", False),
     }
     print("Successful initialization of interface:", interface)
     return {

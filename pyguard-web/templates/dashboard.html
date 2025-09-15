@@ -899,6 +899,50 @@
       .pg-fixed-btn {
         min-width: 120px;
       }
+      .help-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #223543;
+        color: #9fd0e6;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: help;
+        border: 1px solid #2e4d5f;
+        position: relative;
+        flex-shrink: 0;
+        user-select: none;
+        line-height: 1;
+      }
+      .help-icon:hover {
+        background: #2b4a5c;
+        color: #d3f2ff;
+      }
+      .help-tooltip {
+        position: fixed;
+        z-index: 9999;
+        max-width: 320px;
+        background: #0f1d25;
+        border: 1px solid #2a4554;
+        padding: 10px 12px 11px;
+        border-radius: 10px;
+        font-size: 12px;
+        color: #c7d7e0;
+        box-shadow: 0 8px 28px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px #16252e inset;
+        pointer-events: none;
+        opacity: 0;
+        transform: translateY(-4px);
+        transition: opacity 0.12s ease, transform 0.12s ease;
+        line-height: 1.4;
+        white-space: normal;
+      }
+      .help-tooltip.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
     </style>
   </head>
   <body>
@@ -915,6 +959,27 @@
         class="top-bar-right"
         style="display: flex; align-items: center; gap: 14px"
       >
+        <button
+          id="dockerModeBadge"
+          type="button"
+          style="
+            display: none;
+            cursor: default;
+            background: #143642;
+            border: 1px solid #1e5568;
+            color: #7fd7ff;
+            padding: 6px 14px;
+            border-radius: 14px;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            opacity: 0.95;
+          "
+          aria-disabled="true"
+          title="Running inside Docker container"
+        >
+          Docker Mode
+        </button>
         <span
           id="current-interface-label"
           style="font-size: 12px; color: #90a4ae"
@@ -1285,6 +1350,20 @@
           interfacesFetchInFlight = false;
           return;
         }
+        // Show Docker Mode badge if in container
+        try {
+          const badge = document.getElementById("dockerModeBadge");
+          if (badge) {
+            if (
+              data.PYGUARD_IN_DOCKER === true ||
+              data.PYGUARD_IN_DOCKER === 1
+            ) {
+              badge.style.display = "inline-block";
+            } else {
+              badge.style.display = "none";
+            }
+          }
+        } catch (_) {}
         const list = data.interfaces || [];
         // Build desired order and metadata
         const desired = list
@@ -1408,6 +1487,25 @@
           if (!data) return;
           const s = data.server || {};
           serverNetwork = s.network || "";
+          if (typeof data.forward_to_docker_bridge !== "undefined") {
+            s.forward_to_docker_bridge = data.forward_to_docker_bridge;
+          }
+          if (typeof data["dns-service"] !== "undefined") {
+            s["dns-service"] = data["dns-service"];
+          }
+          if (typeof data.PYGUARD_IN_DOCKER !== "undefined") {
+            window.PYGUARD_IN_DOCKER = data.PYGUARD_IN_DOCKER ? 1 : 0;
+            try {
+              const badge = document.getElementById("dockerModeBadge");
+              if (badge) {
+                if (window.PYGUARD_IN_DOCKER === 1) {
+                  badge.style.display = "inline-block";
+                } else {
+                  badge.style.display = "none";
+                }
+              }
+            } catch (_) {}
+          }
           currentServer = s;
           const isActive = !!data.active;
           // Update active pill next to interface name
@@ -2339,9 +2437,32 @@
         const dis = loading ? 'disabled aria-busy="true"' : "";
         const cls = loading ? " input-loading" : "";
         const chkDis = loading ? "disabled" : "";
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="eimClose" aria-label="Close">×</button>\n    <h3>Edit Interface</h3>\n    <form id="eimForm" data-loading="${
-          loading ? 1 : 0
-        }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="eimName">Name</label>\n        <input ${dis} class="${cls.trim()}" id="eimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimPort">Port</label>\n        <input ${dis} class="${cls.trim()}" id="eimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimNetwork">Network</label>\n        <input ${dis} class="${cls.trim()}" id="eimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimPublicIP">Public IP</label>\n        <input ${dis} class="${cls.trim()}" id="eimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field">\n        <label for="eimDNS">DNS</label>\n        <input ${dis} class="${cls.trim()}" id="eimDNS" name="dns" value="${dns}" placeholder="e.g. 1.1.1.1"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="eimIgnore" ${chkDis} checked />\n        <label for="eimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="eimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word;"></div>\n      <div class="pm-actions">\n        <button type="button" id="eimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="eimValidate" class="btn-glow" style="min-width:150px;">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+        const forward_to_docker_bridge =
+          prefill?.forward_to_docker_bridge ??
+          currentServer?.forward_to_docker_bridge ??
+          false;
+        const dns_service =
+          prefill?.dns_service ??
+          currentServer?.["dns-service"] ??
+          currentServer?.dns_service ??
+          false;
+        const showFwd =
+          window.PYGUARD_IN_DOCKER === 1 || window.PYGUARD_IN_DOCKER === true;
+        return (
+          `\n<div class=\"peer-modal-overlay\">\n  <div class=\"peer-modal\" role=\"dialog\" aria-modal=\"true\">\n    <button class=\"peer-modal-close\" id=\"eimClose\" aria-label=\"Close\">×</button>\n    <h3>Edit Interface</h3>\n    <form id=\"eimForm\" data-loading=\"${
+            loading ? 1 : 0
+          }\" autocomplete=\"off\" style=\"display:flex;flex-direction:column;gap:18px;\">\n      <div class=\"pm-field\">\n        <label for=\"eimName\">Name</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimName\" name=\"name\" value=\"${name}\" placeholder=\"e.g. wg0\" required maxlength=\"64\"/>\n      </div>\n      <div class=\"pm-field\">\n        <label for=\"eimPort\">Port</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimPort\" name=\"port\" value=\"${port}\" placeholder=\"51820\"/>\n      </div>\n      <div class=\"pm-field\">\n        <label for=\"eimNetwork\">Network</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimNetwork\" name=\"network\" value=\"${network}\" placeholder=\"10.0.0.0/24\"/>\n      </div>\n      <div class=\"pm-field\">\n        <label for=\"eimPublicIP\">Public IP</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimPublicIP\" name=\"public_ip\" value=\"${public_ip}\" placeholder=\"e.g. 203.0.113.10\"/>\n      </div>\n      <div class=\"pm-field\">\n        <label for=\"eimDNS\">DNS</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimDNS\" name=\"dns\" value=\"${dns}\" placeholder=\"e.g. 1.1.1.1\"/>\n      </div>` +
+          // DNS service toggle (always shown; can be disabled while loading)
+          `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:8px;\">\n        <input type=\"checkbox\" id=\"eimDnsService\" ${chkDis} ${
+            dns_service ? "checked" : ""
+          } />\n        <label for=\"eimDnsService\" style=\"margin:0;\">Enable integrated DNS service</label>\n        <span class=\"help-icon\" data-help=\"Integrated PyGuard DNS server. Resolves peer names to their IPs: peerName.interfaceName -> assigned peer IP (e.g. peer0.wg0 -> 10.0.0.2). Also resolves relay.interfaceName -> first IP in the interface network. Useful for easier hostnames inside the tunnel.\">?</span>\n      </div>` +
+          (showFwd
+            ? `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:8px;\">\n        <input type=\"checkbox\" id=\"eimForwardDocker\" ${chkDis} ${
+                forward_to_docker_bridge ? "checked" : ""
+              } />\n        <label for=\"eimForwardDocker\" style=\"margin:0;\">Forward traffic to Docker bridge</label>\n        <span class=\"help-icon docker-help\" data-help=\"Adds NAT rules so traffic from peers destined to the interface relay name/IP goes to the container bridge allowing peers to access other services running outside this container on the host network.\">?</span>\n      </div>`
+            : "") +
+          `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:8px;\">\n        <input type=\"checkbox\" id=\"eimIgnore\" ${chkDis} checked />\n        <label for=\"eimIgnore\" style=\"margin:0;\">Ignore network range check</label>\n        <span class=\"help-icon\" data-help=\"Disables overlap checking for interface networks. Use only if you are sure overlapping CIDRs will not break routing.\">?</span>\n      </div>\n      <div id=\"eimFeedback\" style=\"font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word;\"></div>\n      <div class=\"pm-actions\">\n        <button type=\"button\" id=\"eimCancel\" class=\"btn-danger btn-press\">Cancel</button>\n        <button type=\"submit\" id=\"eimValidate\" class=\"btn-glow\" style=\"min-width:150px;\">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`
+        );
       }
       async function openEditInterfaceModal() {
         if (!currentInterface) {
@@ -2352,6 +2473,12 @@
         // show immediately (no loading fetch needed)
         editInterfaceModalMount.innerHTML = buildEditInterfaceModal({}, false);
         editInterfaceModalMount.style.display = "block";
+        // Initialize help tooltips for newly injected content
+        if (typeof initHelpTooltips === "function") {
+          try {
+            initHelpTooltips(editInterfaceModalMount);
+          } catch (_) {}
+        }
         const overlay = editInterfaceModalMount.querySelector(
           ".peer-modal-overlay"
         );
@@ -2429,10 +2556,34 @@
               network: newNetwork ? newNetwork : undefined,
               public_ip: (publicIpInput?.value || "").trim() || undefined,
               dns: (dnsInput?.value || "").trim() || undefined,
+              forward_to_docker_bridge: (function () {
+                const cb = form.querySelector("#eimForwardDocker");
+                if (!cb) return undefined; // only send if present
+                const cur = currentServer?.forward_to_docker_bridge ?? false;
+                return cb.checked !== cur ? cb.checked : undefined;
+              })(),
+              dns_service: (function () {
+                const cb = form.querySelector("#eimDnsService");
+                if (!cb) return undefined;
+                const cur =
+                  currentServer?.["dns-service"] ??
+                  currentServer?.dns_service ??
+                  false;
+                return cb.checked !== cur ? cb.checked : undefined;
+              })(),
               old_port: currentServer?.port ?? null,
               old_dns: currentServer?.dns ?? null,
               old_public_ip: currentServer?.public_ip ?? null,
               old_network: currentServer?.network ?? null,
+              old_forward_to_docker_bridge:
+                currentServer?.forward_to_docker_bridge ?? null,
+              old_dns_service: (function () {
+                const cur =
+                  currentServer?.["dns-service"] ??
+                  currentServer?.dns_service ??
+                  null;
+                return cur === null ? null : cur;
+              })(),
             };
             feedback.style.color = "#32c861";
             feedback.textContent = "Validated. Applying changes...";
@@ -2516,6 +2667,32 @@
               const nd = updPayload?.new_data || {};
               const s = nd.server || {};
               serverNetwork = s.network || "";
+              if (typeof nd.forward_to_docker_bridge !== "undefined") {
+                s.forward_to_docker_bridge = nd.forward_to_docker_bridge;
+              }
+              if (typeof nd["dns-service"] !== "undefined") {
+                s["dns-service"] = nd["dns-service"];
+              }
+              if (typeof updPayload.forward_to_docker_bridge !== "undefined") {
+                s.forward_to_docker_bridge =
+                  updPayload.forward_to_docker_bridge;
+              }
+              if (typeof updPayload["dns-service"] !== "undefined") {
+                s["dns-service"] = updPayload["dns-service"];
+              }
+              if (typeof nd.PYGUARD_IN_DOCKER !== "undefined") {
+                window.PYGUARD_IN_DOCKER = nd.PYGUARD_IN_DOCKER ? 1 : 0;
+                try {
+                  const badge = document.getElementById("dockerModeBadge");
+                  if (badge) {
+                    if (window.PYGUARD_IN_DOCKER === 1) {
+                      badge.style.display = "inline-block";
+                    } else {
+                      badge.style.display = "none";
+                    }
+                  }
+                } catch (_) {}
+              }
               currentServer = s;
               ifaceTitle.textContent = updatedName;
               // active pill
@@ -2814,6 +2991,55 @@
             feedback.style.color = "#ff6b6b";
             feedback.textContent = `Error: ${err.message || "Creation failed"}`;
           }
+        });
+      }
+      // Tooltip system for help icons
+      let helpTooltipEl = null;
+      function ensureHelpTooltip() {
+        if (!helpTooltipEl) {
+          helpTooltipEl = document.createElement("div");
+          helpTooltipEl.className = "help-tooltip";
+          document.body.appendChild(helpTooltipEl);
+        }
+        return helpTooltipEl;
+      }
+      function positionHelpTooltip(target) {
+        const tt = ensureHelpTooltip();
+        const rect = target.getBoundingClientRect();
+        const margin = 8;
+        const top = rect.top + window.scrollY - tt.offsetHeight - margin;
+        let left =
+          rect.left + window.scrollX + rect.width / 2 - tt.offsetWidth / 2;
+        const vw = window.innerWidth;
+        if (left < 8) left = 8;
+        if (left + tt.offsetWidth + 8 > vw) left = vw - tt.offsetWidth - 8;
+        tt.style.top =
+          (top < 8 ? rect.bottom + window.scrollY + margin : top) + "px";
+        tt.style.left = left + "px";
+      }
+      function initHelpTooltips(scope) {
+        const icons = scope.querySelectorAll(".help-icon");
+        icons.forEach((icon) => {
+          icon.addEventListener("mouseenter", () => {
+            const msg = icon.getAttribute("data-help");
+            if (!msg) return;
+            const tt = ensureHelpTooltip();
+            tt.textContent = msg;
+            tt.classList.add("visible");
+            // Temporarily set for measurement
+            tt.style.top = "0px";
+            tt.style.left = "0px";
+            requestAnimationFrame(() => positionHelpTooltip(icon));
+          });
+          icon.addEventListener("mouseleave", () => {
+            if (helpTooltipEl) helpTooltipEl.classList.remove("visible");
+          });
+          icon.addEventListener("focus", () =>
+            icon.dispatchEvent(new Event("mouseenter"))
+          );
+          icon.addEventListener("blur", () =>
+            icon.dispatchEvent(new Event("mouseleave"))
+          );
         });
       }
       if (btnOpenAddInterface)

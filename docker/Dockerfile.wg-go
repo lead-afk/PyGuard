@@ -3,7 +3,7 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
     WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard-go \
-    PYGUARD_AUTOCREATE=1
+    PYGUARD_IN_DOCKER=1
 
 # Build deps for wireguard-go + runtime tools
 RUN apt-get update && apt-get install -y --no-install-recommends \

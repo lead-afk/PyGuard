@@ -11,7 +11,10 @@ services:
       - /dev/net/tun
     environment:
       - PYGUARD_WEB_DEBUG=1
-      - PYGUARD_API_BASE=http://127.0.0.1:6655
+      # Auto-create a default wg0 interface on first start (1=enable, 0=disable)
+      - PYGUARD_AUTOCREATE=1
+      # Optionally pre-create additional interfaces (comma-separated). Leave empty or remove if not needed.
+      # - PYGUARD_EXTRA_INTERFACES=wg1,wg2
     ports:
       - "6656:6656/tcp"
       - "51825:51825/udp"

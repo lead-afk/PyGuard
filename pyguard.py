@@ -459,7 +459,8 @@ def load_data(interface: str) -> dict:
         },
         "peers": {},
         "launch_on_start": False,
-        "dns_enabled": False,
+        "dns-service": False,
+        "forward_to_docker_bridge": False,
     }
 
     ensure_directories()
@@ -478,7 +479,8 @@ def load_data(interface: str) -> dict:
         server.setdefault("interface", interface)
         data.setdefault("peers", {})
         data.setdefault("launch_on_start", False)
-        data.setdefault("dns_enabled", False)
+        data.setdefault("dns-service", False)
+        data.setdefault("forward_to_docker_bridge", False)
         return data
     except json.JSONDecodeError:
         print(f"Error: state file for {interface} is corrupted ({path})")
@@ -765,7 +767,40 @@ def get_next_ip(interface: str, custom_network: str = None):
     raise Exception("No available IPs in the network")
 
 
-def get_used_ip_ranges():
+def get_docker_bridge():  # TODO  what if in docker but network mode is host?
+    private = ipaddress.ip_network("172.16.0.0/12")
+    result = subprocess.run(
+        ["ip", "route"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    lines = result.stdout.splitlines()
+    print(lines)
+    for line in lines:
+        line = line.strip()
+        if line.startswith("default via"):
+            parts = line.split()
+            try:
+                gateway = ipaddress.ip_address(parts[2])
+                print(f"Detected docker bridge IP: {gateway}")
+                if gateway in private:
+                    return str(gateway)
+                else:
+                    print(
+                        f"Warning: detected gateway {gateway} is not in the expected docker bridge range (<172.16.0.0/12>)"
+                    )
+            except Exception:
+                continue
+    print("Warning: could not determine docker bridge IP, defaulting to 172.16.0.1")
+    return "172.16.0.1"
+
+
+def get_used_network_names():
+    return [iface for iface, addrs in psutil.net_if_addrs().items()]
+
+
+def get_used_ip_ranges(verbose: bool = False):
     """Return a list of CIDR ranges (subnets) for all local interfaces.
 
     Returns:
@@ -775,6 +810,8 @@ def get_used_ip_ranges():
     ranges = set()
 
     for iface, addrs in psutil.net_if_addrs().items():
+        if verbose:
+            print(f"Interface: {iface}, Addresses: {addrs}")
         for addr in addrs:
             if addr.family.name in ("AF_INET", "AF_INET6"):
                 ip = addr.address
@@ -844,8 +881,9 @@ def validate_new_interface(
     if not ignore_name and (
         data.get("server", {}).get("private_key")
         or (interface + ".conf") in existing_interfaces
+        or interface in get_used_network_names()
     ):
-        return False, {"error": f"Server {interface} already exists"}
+        return False, {"error": f"Server {interface} already exists or name in use"}
     if not ignore_port and port in get_used_ports():
         return False, {"error": f"Port {port} is already in use"}
     if not ignore_network:
@@ -1351,11 +1389,30 @@ ListenPort = {data['server']['port']}
 """
 
     # Default nft PostUp/PostDown (plus any custom hooks stored in JSON)
+
     default_post_up = [
         f"nft add table ip {table_name}",
         f"nft add chain ip {table_name} postrouting_chain {{ type nat hook postrouting priority srcnat \\; policy accept \\; }}",
         f"nft add rule ip {table_name} postrouting_chain ip saddr {network_cidr} counter masquerade",
     ]
+    if data.get("forward_to_docker_bridge"):
+        ip = get_docker_bridge()
+        if not (os.getenv("PYGUARD_IN_DOCKER") == "1"):
+            print("This is not running inside a Docker container.")
+
+        default_post_up.insert(
+            1,
+            f"nft add chain ip {table_name} prerouting_chain {{ type nat hook prerouting priority 0 \\; policy accept \\; }}",
+        )
+        default_post_up.insert(
+            3,
+            f"nft add rule ip {table_name} prerouting_chain ip saddr {network_cidr} ip protocol tcp tcp dport != 53 dnat to {ip}",
+        )
+        default_post_up.insert(
+            3,
+            f"nft add rule ip {table_name} prerouting_chain ip saddr {network_cidr} ip protocol udp udp dport != 53 dnat to {ip}",
+        )
+
     default_post_down = [
         f"nft delete table ip {table_name}",
     ]
@@ -1617,7 +1674,7 @@ def generate_peer_config(interface: str, name: str) -> str | None:
     peer = data["peers"][name]
     server = data["server"]
 
-    if data.get("dns_enabled", False):
+    if data.get("dns-service", False):
         dns_ip = server.get("ip")
     else:
         dns_ip = server.get("dns", "1.1.1.1")
@@ -2025,13 +2082,23 @@ def update_config(interface: str, target: str, parameter: str, value: str):
         return
     if target == "dns-service":
         if value.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
-            data["dns_enabled"] = True
+            data["dns-service"] = True
             print("DNS service enabled (peer configs will use server IP as DNS)")
         else:
-            data["dns_enabled"] = False
+            data["dns-service"] = False
             print("DNS service disabled (peer configs will use custom DNS)")
         save_data(interface, data)
         generate_config(interface, data, non_critical_change=True)
+        return
+    if target == "forward-to-docker-bridge":
+        if value.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
+            data["forward_to_docker_bridge"] = True
+            print("Forwarding to Docker bridge enabled")
+        else:
+            data["forward_to_docker_bridge"] = False
+            print("Forwarding to Docker bridge disabled")
+        save_data(interface, data)
+        generate_config(interface, data)
         return
 
     # Regenerate for consistency (even if public_ip not used in server config yet)
