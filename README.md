@@ -313,15 +313,15 @@ git clone https://github.com/lead-afk/PyGuard.git
 cd PyGuard
 ./init-project.sh  # venv + deps
 source .venv/bin/activate
-uvicorn pyguard-api:app --reload --port 6656
+sudo uvicorn pyguard-api:app --reload --port 6656
 ```
 
 Run selected CLI operations (need root privileges when touching network):
 
 ```bash
-sudo python pyguard.py getDefaults
 sudo python pyguard.py init wg0
-sudo python pyguard.py addPeer wg0 laptop
+sudo python pyguard.py wg0 add laptop
+sudo python pyguard.py wg0 start
 ```
 
 Code style: (lightweight) – please open a PR; formatting tools can be introduced later.
@@ -353,7 +353,7 @@ Use at your own risk. Review code & security posture before exposing to untruste
 ## Special thanks
 
 - K.P.
-- B.A
+- B.A.
 - Copilot
 
 ## PS
