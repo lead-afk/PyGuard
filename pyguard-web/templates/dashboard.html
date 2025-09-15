@@ -945,6 +945,20 @@
         opacity: 1;
         transform: translateY(0);
       }
+      /* Pulsing glow to draw attention to Enable button when interface inactive */
+      @keyframes enablePulse {
+        0% { box-shadow: 0 0 0 0 rgba(95,180,255,0.55), 0 0 6px 2px rgba(95,180,255,0.35); }
+        50% { box-shadow: 0 0 0 10px rgba(95,180,255,0), 0 0 14px 5px rgba(95,180,255,0.7); }
+        100% { box-shadow: 0 0 0 0 rgba(95,180,255,0), 0 0 4px 1px rgba(95,180,255,0.35); }
+      }
+      .btn-enable-pulse {
+        position: relative;
+        animation: enablePulse 2.5s ease-in-out infinite;
+        background: linear-gradient(135deg,#1d4260,#1c5d7a);
+        color: #e1f6ff !important;
+        border: 1px solid #2d6f8f !important;
+      }
+      .btn-enable-pulse:hover { background: linear-gradient(135deg,#205072,#217da0); }
     </style>
   </head>
   <body>
@@ -1492,8 +1506,11 @@
           if (typeof data.forward_to_docker_bridge !== "undefined") {
             s.forward_to_docker_bridge = data.forward_to_docker_bridge;
           }
-          if (typeof data["dns-service"] !== "undefined") {
-            s["dns-service"] = data["dns-service"];
+          if (typeof data["dns_service"] !== "undefined") {
+            s["dns_service"] = data["dns_service"];
+          }
+          if (typeof data["allow_vpn_gateway"] !== "undefined") {
+            s["allow_vpn_gateway"] = data["allow_vpn_gateway"];
           }
           if (typeof data.PYGUARD_IN_DOCKER !== "undefined") {
             window.PYGUARD_IN_DOCKER = data.PYGUARD_IN_DOCKER ? 1 : 0;
@@ -1517,6 +1534,21 @@
             ifaceActivePill.classList.toggle("bad", !isActive);
             ifaceActivePill.textContent = isActive ? "active" : "inactive";
           }
+          // Highlight Enable button if inactive
+          try {
+            const enableBtn = document.getElementById("btnEnableService");
+            const disableBtn = document.getElementById("btnDisableService");
+            if (enableBtn) {
+              if (!isActive) {
+                enableBtn.classList.add("btn-enable-pulse");
+              } else {
+                enableBtn.classList.remove("btn-enable-pulse");
+              }
+            }
+            if (disableBtn && !isActive) {
+              disableBtn.classList.remove("btn-enable-pulse");
+            }
+          } catch(_) {}
           let peersData = data.peers || {};
           if (typeof peersData === "string") {
             try {
@@ -2445,8 +2477,13 @@
           false;
         const dns_service =
           prefill?.dns_service ??
-          currentServer?.["dns-service"] ??
+          currentServer?.["dns_service"] ??
           currentServer?.dns_service ??
+          false;
+        const allow_vpn_gateway =
+          prefill?.allow_vpn_gateway ??
+          currentServer?.["allow_vpn_gateway"] ??
+          currentServer?.allow_vpn_gateway ??
           false;
         const showFwd =
           window.PYGUARD_IN_DOCKER === 1 || window.PYGUARD_IN_DOCKER === true;
@@ -2463,6 +2500,9 @@
                 forward_to_docker_bridge ? "checked" : ""
               } />\n        <label for=\"eimForwardDocker\" style=\"margin:0;\">Forward traffic to Docker bridge</label>\n        <span class=\"help-icon docker-help\" data-help=\"Adds NAT rules so traffic from peers destined to the interface relay name/IP goes to the container bridge allowing peers to access other services running outside this container on the host network.\">?</span>\n      </div>`
             : "") +
+          `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:8px;\">\n        <input type=\"checkbox\" id=\"eimAllowVpnGateway\" ${chkDis} ${
+            allow_vpn_gateway ? "checked" : ""
+          } />\n        <label for=\"eimAllowVpnGateway\" style=\"margin:0;\">Allow VPN gateway</label>\n        <span class=\"help-icon\" data-help=\"If enabled, peers can use this server as a gateway to reach external networks (e.g. the Internet) via proper AllowedIPs (like 0.0.0.0/0) and server-side NAT/forward rules. Disable if you want the VPN to be used only for intra-tunnel/private traffic.\">?</span>\n      </div>` +
           `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:8px;\">\n        <input type=\"checkbox\" id=\"eimIgnore\" ${chkDis} checked />\n        <label for=\"eimIgnore\" style=\"margin:0;\">Ignore network range check</label>\n        <span class=\"help-icon\" data-help=\"Disables overlap checking for interface networks. Use only if you are sure overlapping CIDRs will not break routing.\">?</span>\n      </div>\n      <div id=\"eimFeedback\" style=\"font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word;\"></div>\n      <div class=\"pm-actions\">\n        <button type=\"button\" id=\"eimCancel\" class=\"btn-danger btn-press\">Cancel</button>\n        <button type=\"submit\" id=\"eimValidate\" class=\"btn-glow\" style=\"min-width:150px;\">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`
         );
       }
@@ -2568,8 +2608,17 @@
                 const cb = form.querySelector("#eimDnsService");
                 if (!cb) return undefined;
                 const cur =
-                  currentServer?.["dns-service"] ??
+                  currentServer?.["dns_service"] ??
                   currentServer?.dns_service ??
+                  false;
+                return cb.checked !== cur ? cb.checked : undefined;
+              })(),
+              allow_vpn_gateway: (function () {
+                const cb = form.querySelector("#eimAllowVpnGateway");
+                if (!cb) return undefined;
+                const cur =
+                  currentServer?.["allow_vpn_gateway"] ??
+                  currentServer?.allow_vpn_gateway ??
                   false;
                 return cb.checked !== cur ? cb.checked : undefined;
               })(),
@@ -2581,8 +2630,15 @@
                 currentServer?.forward_to_docker_bridge ?? null,
               old_dns_service: (function () {
                 const cur =
-                  currentServer?.["dns-service"] ??
+                  currentServer?.["dns_service"] ??
                   currentServer?.dns_service ??
+                  null;
+                return cur === null ? null : cur;
+              })(),
+              old_allow_vpn_gateway: (function () {
+                const cur =
+                  currentServer?.["allow_vpn_gateway"] ??
+                  currentServer?.allow_vpn_gateway ??
                   null;
                 return cur === null ? null : cur;
               })(),
@@ -2672,15 +2728,21 @@
               if (typeof nd.forward_to_docker_bridge !== "undefined") {
                 s.forward_to_docker_bridge = nd.forward_to_docker_bridge;
               }
-              if (typeof nd["dns-service"] !== "undefined") {
-                s["dns-service"] = nd["dns-service"];
+              if (typeof nd["dns_service"] !== "undefined") {
+                s["dns_service"] = nd["dns_service"];
+              }
+              if (typeof nd["allow_vpn_gateway"] !== "undefined") {
+                s["allow_vpn_gateway"] = nd["allow_vpn_gateway"];
               }
               if (typeof updPayload.forward_to_docker_bridge !== "undefined") {
                 s.forward_to_docker_bridge =
                   updPayload.forward_to_docker_bridge;
               }
-              if (typeof updPayload["dns-service"] !== "undefined") {
-                s["dns-service"] = updPayload["dns-service"];
+              if (typeof updPayload["dns_service"] !== "undefined") {
+                s["dns_service"] = updPayload["dns_service"];
+              }
+              if (typeof updPayload["allow_vpn_gateway"] !== "undefined") {
+                s["allow_vpn_gateway"] = updPayload["allow_vpn_gateway"];
               }
               if (typeof nd.PYGUARD_IN_DOCKER !== "undefined") {
                 window.PYGUARD_IN_DOCKER = nd.PYGUARD_IN_DOCKER ? 1 : 0;
@@ -2705,6 +2767,13 @@
                 ifaceActivePill.classList.toggle("bad", !isActive);
                 ifaceActivePill.textContent = isActive ? "active" : "inactive";
               }
+              try {
+                const enableBtn = document.getElementById("btnEnableService");
+                if (enableBtn) {
+                  if (!isActive) enableBtn.classList.add("btn-enable-pulse");
+                  else enableBtn.classList.remove("btn-enable-pulse");
+                }
+              } catch(_) {}
               // stats
               const peerCount =
                 nd.peer_count ?? (nd.peers ? Object.keys(nd.peers).length : 0);

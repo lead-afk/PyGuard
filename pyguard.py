@@ -459,8 +459,9 @@ def load_data(interface: str) -> dict:
         },
         "peers": {},
         "launch_on_start": False,
-        "dns-service": False,
+        "dns_service": False,
         "forward_to_docker_bridge": False,
+        "allow_vpn_gateway": False,
     }
 
     ensure_directories()
@@ -479,8 +480,9 @@ def load_data(interface: str) -> dict:
         server.setdefault("interface", interface)
         data.setdefault("peers", {})
         data.setdefault("launch_on_start", False)
-        data.setdefault("dns-service", False)
+        data.setdefault("dns_service", False)
         data.setdefault("forward_to_docker_bridge", False)
+        data.setdefault("allow_vpn_gateway", False)
         return data
     except json.JSONDecodeError:
         print(f"Error: state file for {interface} is corrupted ({path})")
@@ -1392,9 +1394,15 @@ ListenPort = {data['server']['port']}
 
     default_post_up = [
         f"nft add table ip {table_name}",
-        f"nft add chain ip {table_name} postrouting_chain {{ type nat hook postrouting priority srcnat \\; policy accept \\; }}",
-        f"nft add rule ip {table_name} postrouting_chain ip saddr {network_cidr} counter masquerade",
     ]
+    if data.get("allow_vpn_gateway", False):
+        default_post_up.append(
+            f"nft add chain ip {table_name} postrouting_chain {{ type nat hook postrouting priority srcnat \\; policy accept \\; }}"
+        )
+        default_post_up.append(
+            f"nft add rule ip {table_name} postrouting_chain ip saddr {network_cidr} counter masquerade"
+        )
+
     if data.get("forward_to_docker_bridge"):
         ip = get_docker_bridge()
         if not (os.getenv("PYGUARD_IN_DOCKER") == "1"):
@@ -1404,14 +1412,24 @@ ListenPort = {data['server']['port']}
             1,
             f"nft add chain ip {table_name} prerouting_chain {{ type nat hook prerouting priority 0 \\; policy accept \\; }}",
         )
-        default_post_up.insert(
-            3,
-            f"nft add rule ip {table_name} prerouting_chain ip saddr {network_cidr} ip protocol tcp tcp dport != 53 dnat to {ip}",
-        )
-        default_post_up.insert(
-            3,
-            f"nft add rule ip {table_name} prerouting_chain ip saddr {network_cidr} ip protocol udp udp dport != 53 dnat to {ip}",
-        )
+        if data.get("dns_service", False):
+            default_post_up.insert(
+                3,
+                f"nft add rule ip {table_name} prerouting_chain ip daddr {data['server']['ip']} ip protocol tcp tcp dport != 53 dnat to {ip}",
+            )
+            default_post_up.insert(
+                3,
+                f"nft add rule ip {table_name} prerouting_chain ip daddr {data['server']['ip']} ip protocol udp udp dport != 53 dnat to {ip}",
+            )
+        else:
+            default_post_up.insert(
+                3,
+                f"nft add rule ip {table_name} prerouting_chain ip daddr {data['server']['ip']} ip protocol tcp dnat to {ip}",
+            )
+            default_post_up.insert(
+                3,
+                f"nft add rule ip {table_name} prerouting_chain ip daddr {data['server']['ip']} ip protocol udp dnat to {ip}",
+            )
 
     default_post_down = [
         f"nft delete table ip {table_name}",
@@ -1674,7 +1692,7 @@ def generate_peer_config(interface: str, name: str) -> str | None:
     peer = data["peers"][name]
     server = data["server"]
 
-    if data.get("dns-service", False):
+    if data.get("dns_service", False):
         dns_ip = server.get("ip")
     else:
         dns_ip = server.get("dns", "1.1.1.1")
@@ -2080,23 +2098,33 @@ def update_config(interface: str, target: str, parameter: str, value: str):
         print(f"Public endpoint set: {value}")
         # generate_config(interface, data)
         return
-    if target == "dns-service":
+    if target == "dns_service":
         if value.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
-            data["dns-service"] = True
+            data["dns_service"] = True
             print("DNS service enabled (peer configs will use server IP as DNS)")
         else:
-            data["dns-service"] = False
+            data["dns_service"] = False
             print("DNS service disabled (peer configs will use custom DNS)")
         save_data(interface, data)
         generate_config(interface, data, non_critical_change=True)
         return
-    if target == "forward-to-docker-bridge":
+    if target == "forward_to_docker_bridge":
         if value.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
             data["forward_to_docker_bridge"] = True
             print("Forwarding to Docker bridge enabled")
         else:
             data["forward_to_docker_bridge"] = False
             print("Forwarding to Docker bridge disabled")
+        save_data(interface, data)
+        generate_config(interface, data)
+        return
+    if target == "allow_vpn_gateway":
+        if value.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
+            data["allow_vpn_gateway"] = True
+            print("VPN gateway (NAT) enabled")
+        else:
+            data["allow_vpn_gateway"] = False
+            print("VPN gateway (NAT) disabled")
         save_data(interface, data)
         generate_config(interface, data)
         return
@@ -2392,15 +2420,15 @@ def main():
                 return
             new_name = args[0]
             rename_interface(interface, new_name)
-        elif command == "dns-service":
+        elif command == "dns_service":
             if not args:
-                print("Usage: pyguard <iface> dns-service <enable|disable>")
+                print("Usage: pyguard <iface> dns_service <enable|disable>")
                 return
             val = args[0]
             if val.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
-                update_config(interface, "dns-service", "dns-service", "enable")
+                update_config(interface, "dns_service", "dns_service", "enable")
             else:
-                update_config(interface, "dns-service", "dns-service", "disable")
+                update_config(interface, "dns_service", "dns_service", "disable")
 
         elif command == "custom":
             if len(args) < 2:

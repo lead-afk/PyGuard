@@ -566,6 +566,7 @@ class UpdateServerReq(BaseModel):
     network: str | None = None
     forward_to_docker_bridge: bool | None = None
     dns_service: bool | None = None
+    allow_vpn_gateway: bool | None = None
 
     old_port: int | None = None
     old_dns: str | None = None
@@ -573,6 +574,7 @@ class UpdateServerReq(BaseModel):
     old_network: str | None = None
     old_forward_to_docker_bridge: bool | None = None
     old_dns_service: bool | None = None
+    old_allow_vpn_gateway: bool | None = None
 
 
 class AddPeerReq(BaseModel):
@@ -701,7 +703,8 @@ def api_get_interface(interface: str, _=Depends(require_jwt)):
         "active": is_interface_active(interface),
         "forward_to_docker_bridge": d.get("forward_to_docker_bridge", False),
         "PYGUARD_IN_DOCKER": os.getenv("PYGUARD_IN_DOCKER") == "1",
-        "dns-service": d.get("dns-service", False),
+        "dns_service": d.get("dns_service", False),
+        "allow_vpn_gateway": d.get("allow_vpn_gateway", False),
     }
     return resp
 
@@ -774,13 +777,24 @@ def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jw
     ):
         update_config(
             interface,
-            "forward-to-docker-bridge",
-            "forward-to-docker-bridge",
+            "forward_to_docker_bridge",
+            "forward_to_docker_bridge",
             str(req.forward_to_docker_bridge),
         )
         something_changed = True
     if req.dns_service is not None and req.dns_service != req.old_dns_service:
-        update_config(interface, "dns-service", "dns-service", str(req.dns_service))
+        update_config(interface, "dns_service", "dns_service", str(req.dns_service))
+        something_changed = True
+    if (
+        req.allow_vpn_gateway is not None
+        and req.allow_vpn_gateway != req.old_allow_vpn_gateway
+    ):
+        update_config(
+            interface,
+            "allow_vpn_gateway",
+            "allow_vpn_gateway",
+            str(req.allow_vpn_gateway),
+        )
         something_changed = True
 
     if req.name is not None and interface != req.name:
@@ -804,7 +818,8 @@ def api_update_server(interface: str, req: UpdateServerReq, _=Depends(require_jw
         "peer_count": len(peers_obj) if peers_obj else len(d.get("peers", {})),
         "active": is_interface_active(interface),
         "forward_to_docker_bridge": d.get("forward_to_docker_bridge", False),
-        "dns-service": d.get("dns-service", False),
+        "dns_service": d.get("dns_service", False),
+        "allow_vpn_gateway": d.get("allow_vpn_gateway", False),
     }
     print("Successful initialization of interface:", interface)
     return {
