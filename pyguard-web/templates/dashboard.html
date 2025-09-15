@@ -171,6 +171,7 @@
         overflow: hidden;
         min-height: 100px;
         transition: all 0.4s ease-out;
+        box-shadow: 0 0 0 1px #16222c inset, 0 8px 28px -14px #000;
       }
       /* remove gray overlay for consistency with other sections */
       .iface-meta-card:before {
@@ -227,6 +228,7 @@
         position: relative;
         transition: all 0.4s ease-out;
         min-height: 0; /* allow internal scroll containers */
+        box-shadow: 0 0 0 1px #16222c inset, 0 8px 28px -14px #000;
       }
       .peers-layout {
         display: flex;
@@ -3500,7 +3502,12 @@
         const id3 = `pgc_${Date.now()}_${Math.random()
           .toString(36)
           .slice(2, 7)}`; // sysctl block
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" style="max-width:640px;" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="ismClose" aria-label="Close">×</button>\n    <h3 style="margin-top:0;">${heading}</h3>\n    <div style="font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready. To ensure full connectivity and proper WireGuard operation, review the recommended system steps below.</div>\n      <ol style="margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;">\n        <li>To allow for WireGuard traffic port <b>${p}</b> must be open and publicly reachable end-to-end (host firewall, upstream router/NAT, cloud security group):<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id1}">Copy</button><code id="${id1}">${fwCmd1}</code></div>For peer-to-peer routing between clients:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id2}">Copy</button><code id="${id2}">${fwCmd2}</code></div><div style="margin-top:6px;font-size:11px;color:#90a4ae;">These commands plus external firewall/NAT rules ensure peers can reach the interface.</div></li>\n        <li>Enable packet forwarding system-wide:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id3}">Copy</button><code id="${id3}">sysctl -w net.ipv4.ip_forward=1\n# (optional IPv6)\nsysctl -w net.ipv6.conf.all.forwarding=1</code></div><span style="display:block;margin-top:4px;">Persist in /etc/sysctl.conf for reboot survival.</span></li>\n      </ol>\n    </div>\n    <div class="pm-actions" style="margin-top:18px;justify-content:flex-end;gap:10px;">\n      <button type="button" id="ismApplyRules" class="btn-glow pg-fixed-btn" style="background:#1f3a4d;">Apply Rules</button>\n      <button type="button" id="ismUnderstand" class="btn-glow">I Understand</button>\n    </div>\n  </div>\n</div>`;
+        // If running inside Docker, append a snippet recommending exposing the port in docker-compose
+        const dockerSection =
+          typeof window !== "undefined" && window.PYGUARD_IN_DOCKER === 1
+            ? `\n    <hr style="border:none;border-top:1px solid #21343c;margin:12px 0;"/>\n    <div style="font-size:13px;color:#cfd8dc;line-height:1.4;">\n      <div style="margin-bottom:6px;">Detected Docker mode: ensure your container exposes the WireGuard UDP port for this interface. Example docker-compose snippet:</div>\n      <div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="docker_compose_${id1}">Copy</button><code id="docker_compose_${id1}">ports:\n  - "6656:6656/tcp"\n  - "${p}:${p}/udp"</code></div>\n      <div style="margin-top:6px;font-size:11px;color:#90a4ae;">Replace <code>${p}</code> with the WireGuard port for this interface if different. Also ensure the container has the NET_ADMIN capability and /dev/net/tun mapped.</div>\n    </div>`
+            : "";
+        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" style="max-width:640px;" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="ismClose" aria-label="Close">×</button>\n    <h3 style="margin-top:0;">${heading}</h3>\n    <div style="font-size:13px;color:#cfd8dc;display:flex;flex-direction:column;gap:14px;line-height:1.45;">\n      <div>Interface <b>${i}</b> on port <b>${p}</b> is ready. To ensure full connectivity and proper WireGuard operation, review the recommended system steps below.</div>\n      <ol style="margin:0 0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px;">\n        <li>To allow for WireGuard traffic port <b>${p}</b> must be open and publicly reachable end-to-end (host firewall, upstream router/NAT, cloud security group):<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id1}">Copy</button><code id="${id1}">${fwCmd1}</code></div>For peer-to-peer routing between clients:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id2}">Copy</button><code id="${id2}">${fwCmd2}</code></div><div style="margin-top:6px;font-size:11px;color:#90a4ae;">These commands plus external firewall/NAT rules ensure peers can reach the interface.</div></li>\n        <li>Enable packet forwarding system-wide:<div class="pg-code-block pg-copy-wrap"><button class="pg-copy-btn" data-target="${id3}">Copy</button><code id="${id3}">sysctl -w net.ipv4.ip_forward=1\n# (optional IPv6)\nsysctl -w net.ipv6.conf.all.forwarding=1</code></div><span style="display:block;margin-top:4px;">Persist in /etc/sysctl.conf for reboot survival.</span></li>\n      </ol>\n    </div>${dockerSection}\n    <div class="pm-actions" style="margin-top:18px;justify-content:flex-end;gap:10px;">\n      <button type="button" id="ismApplyRules" class="btn-glow pg-fixed-btn" style="background:#1f3a4d;">Apply Rules</button>\n      <button type="button" id="ismUnderstand" class="btn-glow">I Understand</button>\n    </div>\n  </div>\n</div>`;
       }
       function showInterfaceSuccess(kind, iface, port) {
         if (!interfaceSuccessMount) return;
