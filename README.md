@@ -336,19 +336,19 @@ Code style: (lightweight) – please open a PR; formatting tools can be introduc
 
 ## Contributing
 
-PRs / issues welcome.
+- PRs / issues welcome.
 
 ---
 
 ## License
 
-Currently unlicensed (all rights reserved) unless a LICENSE file is added. Open an issue if you need explicit licensing terms.
+- Currently unlicensed (all rights reserved) unless a LICENSE file is added. Open an issue if you need explicit licensing terms.
 
 ---
 
 ## Disclaimer
 
-Use at your own risk. Review code & security posture before exposing to untrusted networks.
+- Use at your own risk. Review code & security posture before exposing to untrusted networks.
 
 ## Special thanks
 
@@ -358,4 +358,4 @@ Use at your own risk. Review code & security posture before exposing to untruste
 
 ## PS
 
-If you own the background used in the page and wish to remove it contact me
+- If you own the background used in the page and wish to remove it contact me

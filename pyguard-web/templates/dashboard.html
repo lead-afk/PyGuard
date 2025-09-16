@@ -1194,11 +1194,11 @@
                     </div>
                     <div class="peer-field dual-traffic">
                       <div class="traffic-col">
-                        <label>Download</label
+                        <label>Upload (from peer)</label
                         ><input id="detailDownload" readonly />
                       </div>
                       <div class="traffic-col">
-                        <label>Upload</label
+                        <label>Download (to peer)</label
                         ><input id="detailUpload" readonly />
                       </div>
                     </div>
@@ -1599,8 +1599,10 @@
               active: !!info.active,
               last_handshake: info.last_handshake || null,
               last_handshake_str: info.last_handshake_str || "",
-              download: info.download || "0 KiB",
-              uploaded: info.uploaded || "0 KiB",
+              // NOTE: From relay/server perspective the original fields reflect server rx/tx.
+              // UI labels were swapped to show Upload(from peer)->server as 'Upload' first.
+              download: info.download || "0 KiB",   // bytes received by server from peer (peer upload)
+              uploaded: info.uploaded || "0 KiB",   // bytes sent by server to peer (peer download)
             };
           });
           console.debug("Loaded peers (with status)", peers);
@@ -1636,13 +1638,11 @@
           }\" title=\"${p.active ? "Online" : "Offline"}\">${
             p.active ? "online" : "offline"
           }</span>`;
-          el.innerHTML = `<div class="line1"><span style="display:flex;align-items:center;gap:6px;"><span>${
-            p.name
-          }</span></span><span>${pill}</span></div><div class="line2"><span>${(
-            p.public_key || ""
-          ).slice(0, 14)}...</span><span>D:${p.download} U:${
-            p.uploaded
-          }</span></div>`;
+          const showKey = p.public_key && p.public_key !== p.name;
+          const keyFrag = showKey
+            ? `<span>${(p.public_key || "").slice(0,14)}...</span>`
+            : "";
+          el.innerHTML = `<div class="line1"><span style="display:flex;align-items:center;gap:6px;"><span>${p.name}</span></span><span>${pill}</span></div><div class="line2">${keyFrag}<span>U:${p.download} D:${p.uploaded}</span></div>`;
           el.onclick = () => openPeer(p.public_key || p.name);
           peersContainer.appendChild(el);
         });
@@ -1869,12 +1869,12 @@
               const line2 = row.querySelector(".line2");
               if (line2) {
                 const peerObj = peers[idx];
-                line2.innerHTML = `<span>${(peerObj.public_key || "").slice(
-                  0,
-                  14
-                )}...</span><span>D:${peerObj.download} U:${
-                  peerObj.uploaded
-                }</span>`;
+                const showKey =
+                  peerObj.public_key && peerObj.public_key !== peerObj.name;
+                const keyFrag = showKey
+                  ? `<span>${(peerObj.public_key || "").slice(0,14)}...</span>`
+                  : "";
+                line2.innerHTML = `${keyFrag}<span>D:${peerObj.download} U:${peerObj.uploaded}</span>`;
               }
               const pillEl = row.querySelector(".status-pill");
               if (pillEl) {
