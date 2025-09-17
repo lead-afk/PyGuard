@@ -219,8 +219,8 @@ def reload_dns_config(specific_iface=None):
             name = iface["name"]
             data = load_data(name)
 
-            if not data.get("dns_service", False) and False:  # Disabled for now
-                continue
+            # if not data.get("dns_service", False) and False:  # Disabled for now
+            #     continue
 
             new_records = {f"relay.{name}": data.get("server", {}).get("ip")}
             for peer_name in data.get("peers", {}):

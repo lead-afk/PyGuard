@@ -21,7 +21,7 @@ Status: early (alpha) – APIs & data layout may still change. Feedback / issues
 - CORS configurable via `PYGUARD_CORS_ORIGINS`
 - Userspace WireGuard (`wireguard-go`) container image, run without kernel module (e.g. certain VPS / containers)
 - Optional embedded DNS responder (A / AAAA) with upstream forwarder
-- Systemd integration for per‑interface services (e.g. `pyguard-wg0.service`)
+- Systemd integration for auto launch `pyguard-launcher.service`
 
 ---
 
