@@ -556,6 +556,9 @@ class InitInterfaceReq(BaseModel):
     port: int | None = None
     network: str | None = None
     public_ip: str | None = None
+    allow_vpn_gateway: bool | None = False
+    enable_dns_service: bool | None = False
+    forward_to_docker_bridge: bool | None = False
 
 
 class UpdateServerReq(BaseModel):
@@ -652,7 +655,7 @@ def api_init_interface(req: InitInterfaceReq, _=Depends(require_jwt)):
         raise HTTPException(status_code=400, detail="Invalid interface name")
     # Reuse core init (prints to stdout; ignore). We don't want CLI printouts; so just call.
     init_server(
-        req.interface, port=req.port, network=req.network, public_ip=req.public_ip
+        req.interface, port=req.port, network=req.network, public_ip=req.public_ip, allow_vpn_gateway=req.allow_vpn_gateway, enable_dns_service=req.enable_dns_service, forward_to_docker_bridge=req.forward_to_docker_bridge
     )
     d = load_data(req.interface)
     if not d.get("server").get("private_key"):

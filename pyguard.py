@@ -915,6 +915,9 @@ def init_server(
     network: str = None,
     public_ip: str | None = None,
     ignore_range_check: bool = True,
+    allow_vpn_gateway: bool = False,
+    enable_dns_service: bool = False,
+    forward_to_docker_bridge: bool = False,
 ):
     """Initialize server state for an interface (idempotent).
 
@@ -977,6 +980,16 @@ def init_server(
     data["server"]["public_ip"] = public_ip
     net = ipaddress.ip_network(network)
     data["server"]["ip"] = net.hosts().__next__().exploded
+
+
+    data["allow_vpn_gateway"] = allow_vpn_gateway
+    data["dns_service"] = enable_dns_service
+    if forward_to_docker_bridge and not os.getenv("PYGUARD_IN_DOCKER") == "1":
+        print(yellow("Warning: Forwarding to Docker bridge is enabled but not running in Docker."))
+        print(yellow("If you are sure you want this, update the setting manually later."))
+    else:
+        data["forward_to_docker_bridge"] = forward_to_docker_bridge
+
     save_data(interface, data)
     print(f"Server initialized with IP: {data['server']['ip']}")
 
@@ -2383,7 +2396,7 @@ def main():
             )
             return
         args = sys.argv[2:]
-        interface = port = net = pub = None
+        interface = port = net = pub = allow_gateway = enable_dns = forward_to_bridge = None
         i = 0
         while i < len(args):
             if i == 0:
@@ -2401,8 +2414,20 @@ def main():
                 pub = args[i + 1]
                 i += 2
                 continue
+            if a in ("--allow-vpn-gateway", "-g") :
+                allow_gateway = True
+                i += 1
+                continue
+            if a in ("--dns-service", "--enable-dns-service", "-d") :
+                enable_dns = True
+                i += 1
+                continue
+            if a in ("--forward-to-docker-bridge", "-b") :                    
+                forward_to_bridge = True
+                i += 1
+                continue
             i += 1
-        init_server(interface, port=port, network=net, public_ip=pub)
+        init_server(interface, port=port, network=net, public_ip=pub, allow_vpn_gateway=allow_gateway, enable_dns_service=enable_dns, forward_to_docker_bridge=forward_to_bridge)
         return
     elif sys.argv[1] == "delete":
         to_delete = sys.argv[2:]

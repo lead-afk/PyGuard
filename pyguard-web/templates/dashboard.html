@@ -416,6 +416,37 @@
         font-size: 10px;
         padding: 1px 6px;
       }
+      /* Feature pills (DNS, Docker forward, VPN gateway) */
+      .status-pill.feature {
+        background: #1a2530;
+        color: #90a4ae;
+        border-color: #2a3a48;
+        opacity: 0.9;
+      }
+      .status-pill.feature.off {
+        background: #1a2530;
+        color: #7f95a1;
+        border-color: #2a3a48;
+        opacity: 0.85;
+      }
+      .status-pill.feature.on.pill-dns {
+        /* lime/green */
+        background: #113820;
+        color: #9cf0b7;
+        border-color: #2e6b41;
+      }
+      .status-pill.feature.on.pill-docker {
+        /* light blue */
+        background: #143642;
+        color: #7fd7ff;
+        border-color: #1e5568;
+      }
+      .status-pill.feature.on.pill-gateway {
+        /* purple */
+        background: #2a1740;
+        color: #d6b3ff;
+        border-color: #4b2a6b;
+      }
       .peers-section-header {
         display: flex;
         align-items: center;
@@ -586,6 +617,58 @@
       .pm-field input:focus {
         outline: 2px solid #335d7a;
         outline-offset: 1px;
+      }
+      /* Toggle switch control */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+      .switch .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #233645;
+        border: 1px solid #2a3a48;
+        transition: 0.18s ease;
+        border-radius: 999px;
+        box-shadow: inset 0 1px 0 0 rgba(0, 0, 0, 0.2);
+      }
+      .switch .slider:before {
+        position: absolute;
+        content: "";
+        height: 20px;
+        width: 20px;
+        left: 2px;
+        top: 1px;
+        background: #9fb3bf;
+        border-radius: 50%;
+        transition: 0.18s ease;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+      }
+      .switch input:checked + .slider {
+        background: #144727;
+        border-color: #1e6b39;
+      }
+      .switch input:checked + .slider:before {
+        transform: translateX(20px);
+        background: #9cf0b7;
+      }
+      .switch input:disabled + .slider {
+        opacity: 0.6;
+        cursor: not-allowed;
+        filter: grayscale(0.2);
       }
       .pm-actions {
         display: flex;
@@ -1052,13 +1135,34 @@
           >
             <div class="iface-meta-card" id="serverMetaCard">
               <div class="iface-meta-left">
-                <div style="display: flex; align-items: center; gap: 8px">
+                <div style="display: flex; align-items: center">
                   <h2 id="ifaceTitle" style="margin: 0">Select an interface</h2>
                   <span
                     id="ifaceActivePill"
                     class="status-pill bad"
                     style="display: none"
                     >inactive</span
+                  >
+                  <span
+                    id="ifaceDnsPill"
+                    class="status-pill small feature off"
+                    style="display: none"
+                    title="DNS service"
+                    >dns</span
+                  >
+                  <span
+                    id="ifaceDockerPill"
+                    class="status-pill small feature off pill-docker"
+                    style="display: none"
+                    title="Docker bridge forward"
+                    >docker fwd</span
+                  >
+                  <span
+                    id="ifaceGatewayPill"
+                    class="status-pill small feature off pill-gateway"
+                    style="display: none"
+                    title="VPN gateway"
+                    >vpn gateway</span
                   >
                 </div>
                 <div class="iface-stats" id="ifaceStats"></div>
@@ -1137,7 +1241,9 @@
                 </div>
                 <div class="peer-detail-panel hidden" id="peerDetailPanel">
                   <div class="peer-detail-header" style="gap: 10px">
-                    <h3 id="peerDetailTitle" style="flex: 1">Peer</h3>
+                    <h3 id="peerDetailTitle" style="flex: 1; display:flex; align-items:center; gap:8px;">Peer
+                      <span class="help-icon" id="peerNameHelp" data-help="Note: On some Linux distributions the wireguard CLI (wg-quick) may modify resolv.conf or interact poorly when a DNS= line is present in a peer config, causing host DNS resolution issues. If you experience broken DNS after bringing an interface up, try removing the DNS line from the peer config and configuring DNS at the system or VPN server level instead.">?</span>
+                    </h3>
                     <span
                       id="peerDetailStatusPill"
                       class="status-pill small"
@@ -1245,6 +1351,9 @@
       const ifaceTitle = document.getElementById("ifaceTitle");
       const ifaceMeta = document.getElementById("ifaceStats");
       const ifaceActivePill = document.getElementById("ifaceActivePill");
+  const ifaceDnsPill = document.getElementById("ifaceDnsPill");
+  const ifaceDockerPill = document.getElementById("ifaceDockerPill");
+  const ifaceGatewayPill = document.getElementById("ifaceGatewayPill");
       const islandEl = document.getElementById("island");
       const logoTitle = document.querySelector(".top-bar .logo-title");
       const peersContainer = document.getElementById("peersContainer");
@@ -1548,6 +1657,38 @@
             ifaceActivePill.classList.toggle("bad", !isActive);
             ifaceActivePill.textContent = isActive ? "active" : "inactive";
           }
+          // Update feature pills (DNS, Docker forward, VPN gateway)
+          const dnsOn = !!(s["dns_service"] ?? s.dns_service ?? false);
+          const dockerOn = !!(s.forward_to_docker_bridge ?? false);
+          const gwOn = !!(s["allow_vpn_gateway"] ?? s.allow_vpn_gateway ?? false);
+          // DNS: always visible when interface selected
+          if (ifaceDnsPill) {
+            ifaceDnsPill.style.display = "inline-block";
+            ifaceDnsPill.classList.toggle("on", dnsOn);
+            ifaceDnsPill.classList.toggle("off", !dnsOn);
+            ifaceDnsPill.classList.toggle("pill-dns", dnsOn);
+            ifaceDnsPill.textContent = "dns";
+            ifaceDnsPill.title = dnsOn ? "DNS service enabled" : "DNS service disabled";
+          }
+          // Docker forward: only when running in Docker mode
+          if (ifaceDockerPill) {
+            const inDocker = window.PYGUARD_IN_DOCKER === 1 || window.PYGUARD_IN_DOCKER === true;
+            ifaceDockerPill.style.display = inDocker ? "inline-block" : "none";
+            if (inDocker) {
+              ifaceDockerPill.classList.toggle("on", dockerOn);
+              ifaceDockerPill.classList.toggle("off", !dockerOn);
+              ifaceDockerPill.textContent = "docker fwd";
+              ifaceDockerPill.title = dockerOn ? "Forward to Docker bridge enabled" : "Forward to Docker bridge disabled";
+            }
+          }
+          // VPN gateway: always visible
+          if (ifaceGatewayPill) {
+            ifaceGatewayPill.style.display = "inline-block";
+            ifaceGatewayPill.classList.toggle("on", gwOn);
+            ifaceGatewayPill.classList.toggle("off", !gwOn);
+            ifaceGatewayPill.textContent = "vpn gateway";
+            ifaceGatewayPill.title = gwOn ? "VPN gateway enabled" : "VPN gateway disabled";
+          }
           // Highlight Enable button if inactive
           try {
             const enableBtn = document.getElementById("btnEnableService");
@@ -1731,7 +1872,16 @@
             if (serverEpEl) serverEpEl.value = ep;
             // Populate panel
             if (peerDetailPanel) {
-              peerDetailTitle.textContent = p.name;
+              // Update peer detail title while preserving the embedded help icon
+              if (peerDetailTitle) {
+                const helpIcon = peerDetailTitle.querySelector('#peerNameHelp');
+                peerDetailTitle.innerHTML = `${p.name}`;
+                if (helpIcon) peerDetailTitle.appendChild(helpIcon);
+              }
+              if (typeof initHelpTooltips === 'function') {
+                const scope = peerDetailTitle?.parentElement || document;
+                initHelpTooltips(scope);
+              }
               detailPublicKey.value = d.public_key || p.public_key || "";
               detailIP.value = d.ip || "";
               detailEndpoint.value = d.endpoint || "";
@@ -1779,7 +1929,15 @@
             if (pubKeyEl) pubKeyEl.value = p.public_key || "";
             if (serverEpEl) serverEpEl.value = "";
             if (peerDetailPanel) {
-              peerDetailTitle.textContent = p.name;
+              if (peerDetailTitle) {
+                const helpIcon = peerDetailTitle.querySelector('#peerNameHelp');
+                peerDetailTitle.innerHTML = `${p.name}`;
+                if (helpIcon) peerDetailTitle.appendChild(helpIcon);
+              }
+              if (typeof initHelpTooltips === 'function') {
+                const scope = peerDetailTitle?.parentElement || document;
+                initHelpTooltips(scope);
+              }
               detailPublicKey.value = p.public_key || "";
               detailIP.value = "";
               detailEndpoint.value = "";
@@ -2506,18 +2664,18 @@
             loading ? 1 : 0
           }\" autocomplete=\"off\" style=\"display:flex;flex-direction:column;gap:18px;\">\n      <div class=\"pm-field\">\n        <label for=\"eimName\">Name</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimName\" name=\"name\" value=\"${name}\" placeholder=\"e.g. wg0\" required maxlength=\"64\"/>\n      </div>\n      <div class=\"pm-field\">\n        <label for=\"eimPort\">Port</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimPort\" name=\"port\" value=\"${port}\" placeholder=\"51820\"/>\n      </div>\n      <div class=\"pm-field\">\n        <label for=\"eimNetwork\">Network</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimNetwork\" name=\"network\" value=\"${network}\" placeholder=\"10.0.0.0/24\"/>\n      </div>\n      <div class=\"pm-field\">\n        <label for=\"eimPublicIP\">Public IP</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimPublicIP\" name=\"public_ip\" value=\"${public_ip}\" placeholder=\"e.g. 203.0.113.10\"/>\n      </div>\n      <div class=\"pm-field\">\n        <label for=\"eimDNS\">DNS</label>\n        <input ${dis} class=\"${cls.trim()}\" id=\"eimDNS\" name=\"dns\" value=\"${dns}\" placeholder=\"e.g. 1.1.1.1\"/>\n      </div>` +
           // DNS service toggle (always shown; can be disabled while loading)
-          `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:8px;\">\n        <input type=\"checkbox\" id=\"eimDnsService\" ${chkDis} ${
+          `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:10px;\">\n        <label class=\"switch\" aria-label=\"Enable integrated DNS service\">\n          <input type=\"checkbox\" id=\"eimDnsService\" ${chkDis} ${
             dns_service ? "checked" : ""
-          } />\n        <label for=\"eimDnsService\" style=\"margin:0;\">Enable integrated DNS service</label>\n        <span class=\"help-icon\" data-help=\"Integrated PyGuard DNS server. Resolves peer names to their IPs: peerName.interfaceName -> assigned peer IP (e.g. peer0.wg0 -> 10.0.0.2). Also resolves relay.interfaceName -> first IP in the interface network. Useful for easier hostnames inside the tunnel.\">?</span>\n      </div>` +
+          } />\n          <span class=\"slider\"></span>\n        </label>\n        <label for=\"eimDnsService\" style=\"margin:0;\">Enable integrated DNS service</label>\n        <span class=\"help-icon\" data-help=\"Integrated PyGuard DNS server. Resolves peer names to their IPs: peerName.interfaceName -> assigned peer IP (e.g. peer0.wg0 -> 10.0.0.2). Also resolves relay.interfaceName -> first IP in the interface network. Useful for easier hostnames inside the tunnel.\">?</span>\n      </div>` +
           (showFwd
-            ? `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:8px;\">\n        <input type=\"checkbox\" id=\"eimForwardDocker\" ${chkDis} ${
+            ? `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:10px;\">\n        <label class=\"switch\" aria-label=\"Forward traffic to Docker bridge\">\n          <input type=\"checkbox\" id=\"eimForwardDocker\" ${chkDis} ${
                 forward_to_docker_bridge ? "checked" : ""
-              } />\n        <label for=\"eimForwardDocker\" style=\"margin:0;\">Forward traffic to Docker bridge</label>\n        <span class=\"help-icon docker-help\" data-help=\"Adds NAT rules so traffic from peers destined to the interface relay name/IP goes to the container bridge allowing peers to access other services running outside this container on the host network.\">?</span>\n      </div>`
+              } />\n          <span class=\"slider\"></span>\n        </label>\n        <label for=\"eimForwardDocker\" style=\"margin:0;\">Forward traffic to Docker bridge</label>\n        <span class=\"help-icon docker-help\" data-help=\"Adds NAT rules so traffic from peers destined to the interface relay name/IP goes to the container bridge allowing peers to access other services running outside this container on the host network.\">?</span>\n      </div>`
             : "") +
-          `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:8px;\">\n        <input type=\"checkbox\" id=\"eimAllowVpnGateway\" ${chkDis} ${
+          `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:10px;\">\n        <label class=\"switch\" aria-label=\"Allow VPN gateway\">\n          <input type=\"checkbox\" id=\"eimAllowVpnGateway\" ${chkDis} ${
             allow_vpn_gateway ? "checked" : ""
-          } />\n        <label for=\"eimAllowVpnGateway\" style=\"margin:0;\">Allow VPN gateway</label>\n        <span class=\"help-icon\" data-help=\"If enabled, peers can use this server as a gateway to reach external networks (e.g. the Internet) via proper AllowedIPs (like 0.0.0.0/0) and server-side NAT/forward rules. Disable if you want the VPN to be used only for intra-tunnel/private traffic.\">?</span>\n      </div>` +
-          `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:8px;\">\n        <input type=\"checkbox\" id=\"eimIgnore\" ${chkDis} checked />\n        <label for=\"eimIgnore\" style=\"margin:0;\">Ignore network range check</label>\n        <span class=\"help-icon\" data-help=\"Disables overlap checking for interface networks. Use only if you are sure overlapping CIDRs will not break routing.\">?</span>\n      </div>\n      <div id=\"eimFeedback\" style=\"font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word;\"></div>\n      <div class=\"pm-actions\">\n        <button type=\"button\" id=\"eimCancel\" class=\"btn-danger btn-press\">Cancel</button>\n        <button type=\"submit\" id=\"eimValidate\" class=\"btn-glow\" style=\"min-width:150px;\">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`
+          } />\n          <span class=\"slider\"></span>\n        </label>\n        <label for=\"eimAllowVpnGateway\" style=\"margin:0;\">Allow VPN gateway</label>\n        <span class=\"help-icon\" data-help=\"If enabled, peers can use this server as a gateway to reach external networks (e.g. the Internet) via proper AllowedIPs (like 0.0.0.0/0) and server-side NAT/forward rules. Disable if you want the VPN to be used only for intra-tunnel/private traffic.\">?</span>\n      </div>` +
+          `\n      <div class=\"pm-field\" style=\"flex-direction:row;align-items:center;gap:10px;\">\n        <label class=\"switch\" aria-label=\"Ignore network range check\">\n          <input type=\"checkbox\" id=\"eimIgnore\" ${chkDis} checked />\n          <span class=\"slider\"></span>\n        </label>\n        <label for=\"eimIgnore\" style=\"margin:0;\">Ignore network range check</label>\n        <span class=\"help-icon\" data-help=\"Disables overlap checking for interface networks. Use only if you are sure overlapping CIDRs will not break routing.\">?</span>\n      </div>\n      <div id=\"eimFeedback\" style=\"font-size:12px; min-height:18px; color:#a0b4c0; white-space:pre-wrap; word-break:break-word;\"></div>\n      <div class=\"pm-actions\">\n        <button type=\"button\" id=\"eimCancel\" class=\"btn-danger btn-press\">Cancel</button>\n        <button type=\"submit\" id=\"eimValidate\" class=\"btn-glow\" style=\"min-width:150px;\">Apply</button>\n      </div>\n    </form>\n  </div>\n</div>`
         );
       }
       async function openEditInterfaceModal() {
@@ -2787,6 +2945,37 @@
                 ifaceActivePill.classList.toggle("bad", !isActive);
                 ifaceActivePill.textContent = isActive ? "active" : "inactive";
               }
+              // Update feature pills after update
+              (function updateFeaturePillsAfterUpdate() {
+                const dnsOn = !!(s["dns_service"] ?? s.dns_service ?? false);
+                const dockerOn = !!(s.forward_to_docker_bridge ?? false);
+                const gwOn = !!(s["allow_vpn_gateway"] ?? s.allow_vpn_gateway ?? false);
+                if (ifaceDnsPill) {
+                  ifaceDnsPill.style.display = "inline-block";
+                  ifaceDnsPill.classList.toggle("on", dnsOn);
+                  ifaceDnsPill.classList.toggle("off", !dnsOn);
+                  ifaceDnsPill.classList.toggle("pill-dns", dnsOn);
+                  ifaceDnsPill.textContent = "dns";
+                  ifaceDnsPill.title = dnsOn ? "DNS service enabled" : "DNS service disabled";
+                }
+                if (ifaceDockerPill) {
+                  const inDocker = window.PYGUARD_IN_DOCKER === 1 || window.PYGUARD_IN_DOCKER === true;
+                  ifaceDockerPill.style.display = inDocker ? "inline-block" : "none";
+                  if (inDocker) {
+                    ifaceDockerPill.classList.toggle("on", dockerOn);
+                    ifaceDockerPill.classList.toggle("off", !dockerOn);
+                    ifaceDockerPill.textContent = "docker fwd";
+                    ifaceDockerPill.title = dockerOn ? "Forward to Docker bridge enabled" : "Forward to Docker bridge disabled";
+                  }
+                }
+                if (ifaceGatewayPill) {
+                  ifaceGatewayPill.style.display = "inline-block";
+                  ifaceGatewayPill.classList.toggle("on", gwOn);
+                  ifaceGatewayPill.classList.toggle("off", !gwOn);
+                  ifaceGatewayPill.textContent = "vpn gateway";
+                  ifaceGatewayPill.title = gwOn ? "VPN gateway enabled" : "VPN gateway disabled";
+                }
+              })();
               try {
                 const enableBtn = document.getElementById("btnEnableService");
                 if (enableBtn) {
@@ -2896,9 +3085,23 @@
         const dis = loading ? 'disabled aria-busy="true"' : "";
         const cls = loading ? " input-loading" : "";
         const chkDis = loading ? "disabled" : "";
-        return `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="aimClose" aria-label="Close">×</button>\n    <h3>Add Interface</h3>\n    <form id="aimForm" data-loading="${
-          loading ? 1 : 0
-        }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="aimName">Name</label>\n        <input ${dis} class="${cls.trim()}" id="aimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPort">Port</label>\n        <input ${dis} class="${cls.trim()}" id="aimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimNetwork">Network</label>\n        <input ${dis} class="${cls.trim()}" id="aimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPublicIP">Public IP</label>\n        <input ${dis} class="${cls.trim()}" id="aimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <input type="checkbox" id="aimIgnore" ${chkDis} checked />\n        <label for="aimIgnore" style="margin:0;">Ignore network range check</label>\n      </div>\n      <div id="aimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="aimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="aimCreate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`;
+        const showFwd =
+          window.PYGUARD_IN_DOCKER === 1 || window.PYGUARD_IN_DOCKER === true;
+        return (
+          `\n<div class="peer-modal-overlay">\n  <div class="peer-modal" role="dialog" aria-modal="true">\n    <button class="peer-modal-close" id="aimClose" aria-label="Close">×</button>\n    <h3>Add Interface</h3>\n    <form id="aimForm" data-loading="${
+            loading ? 1 : 0
+          }" autocomplete="off" style="display:flex;flex-direction:column;gap:18px;">\n      <div class="pm-field">\n        <label for="aimName">Name</label>\n        <input ${dis} class="${cls.trim()}" id="aimName" name="name" value="${name}" placeholder="e.g. wg0" required maxlength="64"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPort">Port</label>\n        <input ${dis} class="${cls.trim()}" id="aimPort" name="port" value="${port}" placeholder="51820"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimNetwork">Network</label>\n        <input ${dis} class="${cls.trim()}" id="aimNetwork" name="network" value="${network}" placeholder="10.0.0.0/24"/>\n      </div>\n      <div class="pm-field">\n        <label for="aimPublicIP">Public IP</label>\n        <input ${dis} class="${cls.trim()}" id="aimPublicIP" name="public_ip" value="${public_ip}" placeholder="e.g. 203.0.113.10"/>\n      </div>` +
+          // DNS service toggle (switch)
+          `\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <label class="switch" aria-label="Enable integrated DNS service">\n          <input type="checkbox" id="aimDnsService" ${chkDis} />\n          <span class="slider"></span>\n        </label>\n        <label for="aimDnsService" style="margin:0;">Enable integrated DNS service</label>\n        <span class="help-icon" data-help="Integrated PyGuard DNS server. Resolves peer names to their IPs: peerName.interfaceName -> assigned peer IP (e.g. peer0.wg0 -> 10.0.0.2). Also resolves relay.interfaceName -> first IP in the interface network. Useful for easier hostnames inside the tunnel.">?</span>\n      </div>` +
+          // Forward to docker bridge (Docker mode only)
+          (showFwd
+            ? `\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <label class="switch" aria-label="Forward traffic to Docker bridge">\n          <input type="checkbox" id="aimForwardDocker" ${chkDis} />\n          <span class="slider"></span>\n        </label>\n        <label for="aimForwardDocker" style="margin:0;">Forward traffic to Docker bridge</label>\n        <span class="help-icon docker-help" data-help="Adds NAT rules so traffic from peers destined to the interface relay name/IP goes to the container bridge allowing peers to access other services running outside this container on the host network.">?</span>\n      </div>`
+            : "") +
+          // Allow VPN gateway (switch)
+          `\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <label class="switch" aria-label="Allow VPN gateway">\n          <input type="checkbox" id="aimAllowVpnGateway" ${chkDis} />\n          <span class="slider"></span>\n        </label>\n        <label for="aimAllowVpnGateway" style="margin:0;">Allow VPN gateway</label>\n        <span class="help-icon" data-help="If enabled, peers can use this server as a gateway to reach external networks (e.g. the Internet) via proper AllowedIPs (like 0.0.0.0/0) and server-side NAT/forward rules. Disable if you want the VPN to be used only for intra-tunnel/private traffic.">?</span>\n      </div>` +
+          // Ignore range check (switch)
+          `\n      <div class="pm-field" style="flex-direction:row;align-items:center;gap:10px;">\n        <label class="switch" aria-label="Ignore network range check">\n          <input type="checkbox" id="aimIgnore" ${chkDis} checked />\n          <span class="slider"></span>\n        </label>\n        <label for="aimIgnore" style="margin:0;">Ignore network range check</label>\n        <span class="help-icon" data-help="Disables overlap checking for interface networks. Use only if you are sure overlapping CIDRs will not break routing.">?</span>\n      </div>\n      <div id="aimFeedback" style="font-size:12px; min-height:18px; color:#a0b4c0;"></div>\n      <div class="pm-actions">\n        <button type="button" id="aimCancel" class="btn-danger btn-press">Cancel</button>\n        <button type="submit" id="aimCreate" class="btn-glow">Create</button>\n      </div>\n    </form>\n  </div>\n</div>`
+        );
       }
       async function openAddInterfaceModal() {
         if (!addInterfaceModalMount) return;
@@ -2913,6 +3116,12 @@
         const form = addInterfaceModalMount.querySelector("#aimForm");
         const feedback = addInterfaceModalMount.querySelector("#aimFeedback");
         const nameInput = addInterfaceModalMount.querySelector("#aimName");
+        // Initialize tooltips for help icons in the modal
+        if (typeof initHelpTooltips === "function") {
+          try {
+            initHelpTooltips(addInterfaceModalMount);
+          } catch (_) {}
+        }
         function close() {
           addInterfaceModalMount.style.display = "none";
           addInterfaceModalMount.innerHTML = "";
@@ -2953,10 +3162,22 @@
           });
           const chk = addInterfaceModalMount.querySelector("#aimIgnore");
           if (chk) chk.removeAttribute("disabled");
+          const chkDns = addInterfaceModalMount.querySelector("#aimDnsService");
+          if (chkDns) chkDns.removeAttribute("disabled");
+          const chkFwd = addInterfaceModalMount.querySelector("#aimForwardDocker");
+          if (chkFwd) chkFwd.removeAttribute("disabled");
+          const chkGw = addInterfaceModalMount.querySelector("#aimAllowVpnGateway");
+          if (chkGw) chkGw.removeAttribute("disabled");
           isLoading = false;
           form?.setAttribute("data-loading", "0");
           // Now focus the name field
           _name?.focus();
+          // Re-init tooltips after unlocking to ensure size is measured correctly
+          if (typeof initHelpTooltips === "function") {
+            try {
+              initHelpTooltips(addInterfaceModalMount);
+            } catch (_) {}
+          }
         })();
         form.addEventListener("submit", async (e) => {
           e.preventDefault();
@@ -2977,6 +3198,15 @@
           const public_ip = (
             addInterfaceModalMount.querySelector("#aimPublicIP")?.value || ""
           ).trim();
+          const enable_dns_service = !!addInterfaceModalMount.querySelector(
+            "#aimDnsService"
+          )?.checked;
+          const allow_vpn_gateway = !!addInterfaceModalMount.querySelector(
+            "#aimAllowVpnGateway"
+          )?.checked;
+          const forward_to_docker_bridge = !!addInterfaceModalMount.querySelector(
+            "#aimForwardDocker"
+          )?.checked;
           const ignore =
             !!addInterfaceModalMount.querySelector("#aimIgnore")?.checked;
           const port = parseInt(portStr, 10);
@@ -3016,6 +3246,16 @@
             feedback.textContent = "Validated. Creating...";
             const createBody = { interface: name, port, network };
             if (public_ip) createBody.public_ip = public_ip;
+            // New flags
+            createBody.enable_dns_service = enable_dns_service;
+            createBody.allow_vpn_gateway = allow_vpn_gateway;
+            if (
+              addInterfaceModalMount.querySelector("#aimForwardDocker") !==
+              null
+            ) {
+              createBody.forward_to_docker_bridge =
+                !!forward_to_docker_bridge;
+            }
             const res = await fetchJSON(`${apiBase}/interfaces/add`, {
               method: "POST",
               headers: headers(),
@@ -3400,6 +3640,12 @@
         if (peersContainerEl) peersContainerEl.innerHTML = "";
         const pill = document.getElementById("ifaceActivePill");
         if (pill) pill.style.display = "none";
+  const dnsP = document.getElementById("ifaceDnsPill");
+  if (dnsP) dnsP.style.display = "none";
+  const dockP = document.getElementById("ifaceDockerPill");
+  if (dockP) dockP.style.display = "none";
+  const gwP = document.getElementById("ifaceGatewayPill");
+  if (gwP) gwP.style.display = "none";
         const currentLabel = document.getElementById("current-interface-label");
         if (currentLabel) currentLabel.textContent = "";
         // Reset state

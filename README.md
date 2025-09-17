@@ -72,8 +72,9 @@ cd PyGuard
 ./init-project.sh
 
 # (As root) initialize first interface
-sudo ./pyguard.py init wg0
-sudo ./pyguard.py apply wg0   # write config + bring up
+sudo ./pyguard.py init wg0 # create wg0
+sudo ./pyguard.py wg0 start # bring interface up
+sudo ./pyguard.py wg0 enable # bring the interface on system boot
 
 # Launch API (see 'API Root Requirements' below)
 uvicorn pyguard-api:app --host 127.0.0.1 --port 6656
@@ -155,8 +156,6 @@ Security Notes:
 ---
 
 ## CLI Overview
-
-The README previously listed legacy prototype commands (apply / addPeer / showPeer etc.). Below is the accurate, current command surface taken from `pyguard.py`.
 
 Top‑level commands:
 
