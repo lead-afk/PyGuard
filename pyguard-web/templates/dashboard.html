@@ -406,15 +406,31 @@
         background: #113820;
         color: #9cf0b7;
         border-color: #2e6b41;
+        box-shadow: 0 0 8px -2px rgba(156, 240, 183, 0.4);
       }
       .status-pill.bad {
         background: #3a1b1b;
         color: #ffb3b3;
         border-color: #6b2e2e;
+        box-shadow: 0 0 8px -2px rgba(255, 179, 179, 0.3);
+      }
+      .status-pill.ok:hover {
+        box-shadow: 0 0 12px -1px rgba(156, 240, 183, 0.6);
+      }
+      .status-pill.bad:hover {
+        box-shadow: 0 0 12px -1px rgba(255, 179, 179, 0.5);
       }
       .status-pill.small {
         font-size: 10px;
         padding: 1px 6px;
+      }
+      /* Pill hover animations and glows */
+      .status-pill {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        cursor: help;
+      }
+      .status-pill:hover {
+        transform: translateY(-2px);
       }
       /* Feature pills (DNS, Docker forward, VPN gateway) */
       .status-pill.feature {
@@ -434,18 +450,34 @@
         background: #113820;
         color: #9cf0b7;
         border-color: #2e6b41;
+        box-shadow: 0 0 8px -2px rgba(156, 240, 183, 0.4);
       }
       .status-pill.feature.on.pill-docker {
         /* light blue */
         background: #143642;
         color: #7fd7ff;
         border-color: #1e5568;
+        box-shadow: 0 0 8px -2px rgba(127, 215, 255, 0.4);
       }
       .status-pill.feature.on.pill-gateway {
         /* purple */
         background: #2a1740;
         color: #d6b3ff;
         border-color: #4b2a6b;
+        box-shadow: 0 0 8px -2px rgba(214, 179, 255, 0.4);
+      }
+      /* Enhanced hover effects for active pills */
+      .status-pill.feature.on:hover {
+        transform: translateY(-3px);
+      }
+      .status-pill.feature.on.pill-dns:hover {
+        box-shadow: 0 0 12px -1px rgba(156, 240, 183, 0.6);
+      }
+      .status-pill.feature.on.pill-docker:hover {
+        box-shadow: 0 0 12px -1px rgba(127, 215, 255, 0.6);
+      }
+      .status-pill.feature.on.pill-gateway:hover {
+        box-shadow: 0 0 12px -1px rgba(214, 179, 255, 0.6);
       }
       .peers-section-header {
         display: flex;
@@ -1141,6 +1173,7 @@
                     id="ifaceActivePill"
                     class="status-pill bad"
                     style="display: none"
+                    data-help="Interface WireGuard service status. Active means the WireGuard interface is up and running, inactive means it's stopped or not configured to start automatically."
                     >inactive</span
                   >
                   <span
@@ -1148,6 +1181,7 @@
                     class="status-pill small feature off"
                     style="display: none"
                     title="DNS service"
+                    data-help="Integrated PyGuard DNS server. When enabled, resolves peer names to their IPs (e.g. peerName.interfaceName -> assigned peer IP) and relay.interfaceName -> first IP in the interface network."
                     >dns</span
                   >
                   <span
@@ -1155,6 +1189,7 @@
                     class="status-pill small feature off pill-docker"
                     style="display: none"
                     title="Docker bridge forward"
+                    data-help="Adds NAT rules so traffic from peers destined to the interface relay name/IP goes to the container bridge allowing peers to access other services running outside this container on the host network."
                     >docker fwd</span
                   >
                   <span
@@ -1162,6 +1197,7 @@
                     class="status-pill small feature off pill-gateway"
                     style="display: none"
                     title="VPN gateway"
+                    data-help="If enabled, peers can use this server as a gateway to reach external networks (e.g. the Internet) via proper AllowedIPs (like 0.0.0.0/0) and server-side NAT/forward rules. Disable if you want the VPN to be used only for intra-tunnel/private traffic."
                     >vpn gateway</span
                   >
                 </div>
@@ -1549,7 +1585,15 @@
             pill.classList.toggle("ok", !!active);
             pill.classList.toggle("bad", !active);
             pill.textContent = active ? "active" : "inactive";
-            pill.title = active ? "Active" : "Inactive";
+            pill.title = active
+              ? `Interface ${name} is up and running`
+              : `Interface ${name} is not turned on, bring it up by pressing enable button`;
+            pill.setAttribute(
+              "data-help",
+              active
+                ? `Interface ${name} is up and running`
+                : `Interface ${name} is not turned on, bring it up by pressing enable button`
+            );
           }
         });
 
@@ -1656,6 +1700,25 @@
             ifaceActivePill.classList.toggle("ok", isActive);
             ifaceActivePill.classList.toggle("bad", !isActive);
             ifaceActivePill.textContent = isActive ? "active" : "inactive";
+            const nm = currentInterface || data?.interface || "interface";
+            ifaceActivePill.title = isActive
+              ? `Interface ${nm} is up and running`
+              : `Interface ${nm} is not turned on, bring it up by pressing enable button`;
+            ifaceActivePill.setAttribute(
+              "data-help",
+              isActive
+                ? `Interface ${nm} is up and running`
+                : `Interface ${nm} is not turned on, bring it up by pressing enable button`
+            );
+            // If user is already hovering/focused, refresh the tooltip content immediately
+            try {
+              if (
+                ifaceActivePill.matches(":hover") ||
+                document.activeElement === ifaceActivePill
+              ) {
+                ifaceActivePill.dispatchEvent(new Event("mouseenter"));
+              }
+            } catch (_) {}
           }
           // Update feature pills (DNS, Docker forward, VPN gateway)
           const dnsOn = !!(s["dns_service"] ?? s.dns_service ?? false);
@@ -1668,7 +1731,17 @@
             ifaceDnsPill.classList.toggle("off", !dnsOn);
             ifaceDnsPill.classList.toggle("pill-dns", dnsOn);
             ifaceDnsPill.textContent = "dns";
-            ifaceDnsPill.title = dnsOn ? "DNS service enabled" : "DNS service disabled";
+            const dnsName = "DNS service";
+            const dnsMsg = dnsOn
+              ? `${dnsName} is active`
+              : `${dnsName} is disabled, check its usage in edit window`;
+            ifaceDnsPill.title = dnsMsg;
+            ifaceDnsPill.setAttribute("data-help", dnsMsg);
+            try {
+              if (ifaceDnsPill.matches(":hover") || document.activeElement === ifaceDnsPill) {
+                ifaceDnsPill.dispatchEvent(new Event("mouseenter"));
+              }
+            } catch (_) {}
           }
           // Docker forward: only when running in Docker mode
           if (ifaceDockerPill) {
@@ -1678,7 +1751,17 @@
               ifaceDockerPill.classList.toggle("on", dockerOn);
               ifaceDockerPill.classList.toggle("off", !dockerOn);
               ifaceDockerPill.textContent = "docker fwd";
-              ifaceDockerPill.title = dockerOn ? "Forward to Docker bridge enabled" : "Forward to Docker bridge disabled";
+              const dockName = "Docker bridge forward";
+              const dockMsg = dockerOn
+                ? `${dockName} is active`
+                : `${dockName} is disabled, check its usage in edit window`;
+              ifaceDockerPill.title = dockMsg;
+              ifaceDockerPill.setAttribute("data-help", dockMsg);
+              try {
+                if (ifaceDockerPill.matches(":hover") || document.activeElement === ifaceDockerPill) {
+                  ifaceDockerPill.dispatchEvent(new Event("mouseenter"));
+                }
+              } catch (_) {}
             }
           }
           // VPN gateway: always visible
@@ -1687,7 +1770,17 @@
             ifaceGatewayPill.classList.toggle("on", gwOn);
             ifaceGatewayPill.classList.toggle("off", !gwOn);
             ifaceGatewayPill.textContent = "vpn gateway";
-            ifaceGatewayPill.title = gwOn ? "VPN gateway enabled" : "VPN gateway disabled";
+            const gwName = "VPN gateway";
+            const gwMsg = gwOn
+              ? `${gwName} is active`
+              : `${gwName} is disabled, check its usage in edit window`;
+            ifaceGatewayPill.title = gwMsg;
+            ifaceGatewayPill.setAttribute("data-help", gwMsg);
+            try {
+              if (ifaceGatewayPill.matches(":hover") || document.activeElement === ifaceGatewayPill) {
+                ifaceGatewayPill.dispatchEvent(new Event("mouseenter"));
+              }
+            } catch (_) {}
           }
           // Highlight Enable button if inactive
           try {
@@ -1751,6 +1844,13 @@
         } finally {
           peerLoading.style.display = "none";
         }
+        
+        // Initialize tooltips for pills after loading interface
+        if (typeof initHelpTooltips === "function") {
+          try {
+            initHelpTooltips(document);
+          } catch (_) {}
+        }
       }
       function renderPeerList() {
         const q = peerSearch.value.trim().toLowerCase();
@@ -1776,7 +1876,7 @@
           el.dataset.name = p.name;
           const pill = `<span class=\"status-pill small ${
             p.active ? "ok" : "bad"
-          }\" title=\"${p.active ? "Online" : "Offline"}\">${
+          }\" title=\"${p.active ? "Online" : "Offline"}\" data-help=\"${p.active ? "This peer has had a recent handshake with the server and is considered online." : "This peer has not had a recent handshake or has been offline for more than 10 minutes."}\">${
             p.active ? "online" : "offline"
           }</span>`;
           const showKey = p.public_key && p.public_key !== p.name;
@@ -1787,6 +1887,13 @@
           el.onclick = () => openPeer(p.public_key || p.name);
           peersContainer.appendChild(el);
         });
+        
+        // Initialize tooltips for newly rendered peer pills
+        if (typeof initHelpTooltips === "function") {
+          try {
+            initHelpTooltips(peersContainer);
+          } catch (_) {}
+        }
       }
       function setPeerDetailLoading(loading) {
         const fields = [
@@ -1909,6 +2016,9 @@
                   ? "online"
                   : "offline";
                 peerDetailStatusPill.title = online ? "Online" : "Offline";
+                peerDetailStatusPill.setAttribute("data-help", online 
+                  ? "This peer has had a recent handshake with the server and is considered online." 
+                  : "This peer has not had a recent handshake or has been offline for more than 10 minutes.");
               }
             }
           } else {
@@ -1954,6 +2064,9 @@
                   ? "online"
                   : "offline";
                 peerDetailStatusPill.title = p.active ? "Online" : "Offline";
+                peerDetailStatusPill.setAttribute("data-help", p.active 
+                  ? "This peer has had a recent handshake with the server and is considered online." 
+                  : "This peer has not had a recent handshake or has been offline for more than 10 minutes.");
               }
             }
           }
@@ -2040,6 +2153,9 @@
                 pillEl.classList.toggle("bad", !peers[idx].active);
                 pillEl.textContent = peers[idx].active ? "online" : "offline";
                 pillEl.title = peers[idx].active ? "Online" : "Offline";
+                pillEl.setAttribute("data-help", peers[idx].active 
+                  ? "This peer has had a recent handshake with the server and is considered online." 
+                  : "This peer has not had a recent handshake or has been offline for more than 10 minutes.");
               }
             }
           });
@@ -2054,6 +2170,9 @@
             peerDetailStatusPill.classList.toggle("bad", !online);
             peerDetailStatusPill.textContent = online ? "online" : "offline";
             peerDetailStatusPill.title = online ? "Online" : "Offline";
+            peerDetailStatusPill.setAttribute("data-help", online 
+              ? "This peer has had a recent handshake with the server and is considered online." 
+              : "This peer has not had a recent handshake or has been offline for more than 10 minutes.");
           }
         } catch (e) {
           /* ignore refresh errors */
@@ -2357,7 +2476,10 @@
                   pill.classList.toggle("ok", !!active);
                   pill.classList.toggle("bad", !active);
                   pill.textContent = active ? "active" : "inactive";
-                  pill.title = active ? "Active" : "Inactive";
+                  const msgOn = `Interface ${name} is up and running`;
+                  const msgOff = `Interface ${name} is not turned on, bring it up by pressing enable button`;
+                  pill.title = active ? msgOn : msgOff;
+                  pill.setAttribute("data-help", active ? msgOn : msgOff);
                 }
               });
               desired.forEach(({ name }) => {
@@ -2427,7 +2549,10 @@
                   pill.classList.toggle("ok", !!active);
                   pill.classList.toggle("bad", !active);
                   pill.textContent = active ? "active" : "inactive";
-                  pill.title = active ? "Active" : "Inactive";
+                  const msgOn = `Interface ${name} is up and running`;
+                  const msgOff = `Interface ${name} is not turned on, bring it up by pressing enable button`;
+                  pill.title = active ? msgOn : msgOff;
+                  pill.setAttribute("data-help", active ? msgOn : msgOff);
                 }
               });
               desired.forEach(({ name }) => {
@@ -2944,6 +3069,24 @@
                 ifaceActivePill.classList.toggle("ok", isActive);
                 ifaceActivePill.classList.toggle("bad", !isActive);
                 ifaceActivePill.textContent = isActive ? "active" : "inactive";
+                const nm = currentInterface || updatedName || nd?.interface || "interface";
+                ifaceActivePill.title = isActive
+                  ? `Interface ${nm} is up and running`
+                  : `Interface ${nm} is not turned on, bring it up by pressing enable button`;
+                ifaceActivePill.setAttribute(
+                  "data-help",
+                  isActive
+                    ? `Interface ${nm} is up and running`
+                    : `Interface ${nm} is not turned on, bring it up by pressing enable button`
+                );
+                try {
+                  if (
+                    ifaceActivePill.matches(":hover") ||
+                    document.activeElement === ifaceActivePill
+                  ) {
+                    ifaceActivePill.dispatchEvent(new Event("mouseenter"));
+                  }
+                } catch (_) {}
               }
               // Update feature pills after update
               (function updateFeaturePillsAfterUpdate() {
@@ -2956,7 +3099,17 @@
                   ifaceDnsPill.classList.toggle("off", !dnsOn);
                   ifaceDnsPill.classList.toggle("pill-dns", dnsOn);
                   ifaceDnsPill.textContent = "dns";
-                  ifaceDnsPill.title = dnsOn ? "DNS service enabled" : "DNS service disabled";
+                  const dnsName = "DNS service";
+                  const dnsMsg = dnsOn
+                    ? `${dnsName} is active`
+                    : `${dnsName} is disabled, check its usage in edit window`;
+                  ifaceDnsPill.title = dnsMsg;
+                  ifaceDnsPill.setAttribute("data-help", dnsMsg);
+                  try {
+                    if (ifaceDnsPill.matches(":hover") || document.activeElement === ifaceDnsPill) {
+                      ifaceDnsPill.dispatchEvent(new Event("mouseenter"));
+                    }
+                  } catch (_) {}
                 }
                 if (ifaceDockerPill) {
                   const inDocker = window.PYGUARD_IN_DOCKER === 1 || window.PYGUARD_IN_DOCKER === true;
@@ -2965,7 +3118,17 @@
                     ifaceDockerPill.classList.toggle("on", dockerOn);
                     ifaceDockerPill.classList.toggle("off", !dockerOn);
                     ifaceDockerPill.textContent = "docker fwd";
-                    ifaceDockerPill.title = dockerOn ? "Forward to Docker bridge enabled" : "Forward to Docker bridge disabled";
+                    const dockName = "Docker bridge forward";
+                    const dockMsg = dockerOn
+                      ? `${dockName} is active`
+                      : `${dockName} is disabled, check its usage in edit window`;
+                    ifaceDockerPill.title = dockMsg;
+                    ifaceDockerPill.setAttribute("data-help", dockMsg);
+                    try {
+                      if (ifaceDockerPill.matches(":hover") || document.activeElement === ifaceDockerPill) {
+                        ifaceDockerPill.dispatchEvent(new Event("mouseenter"));
+                      }
+                    } catch (_) {}
                   }
                 }
                 if (ifaceGatewayPill) {
@@ -2973,7 +3136,17 @@
                   ifaceGatewayPill.classList.toggle("on", gwOn);
                   ifaceGatewayPill.classList.toggle("off", !gwOn);
                   ifaceGatewayPill.textContent = "vpn gateway";
-                  ifaceGatewayPill.title = gwOn ? "VPN gateway enabled" : "VPN gateway disabled";
+                  const gwName = "VPN gateway";
+                  const gwMsg = gwOn
+                    ? `${gwName} is active`
+                    : `${gwName} is disabled, check its usage in edit window`;
+                  ifaceGatewayPill.title = gwMsg;
+                  ifaceGatewayPill.setAttribute("data-help", gwMsg);
+                  try {
+                    if (ifaceGatewayPill.matches(":hover") || document.activeElement === ifaceGatewayPill) {
+                      ifaceGatewayPill.dispatchEvent(new Event("mouseenter"));
+                    }
+                  } catch (_) {}
                 }
               })();
               try {
@@ -3040,6 +3213,13 @@
                 const finalPort =
                   currentServer?.port || s.port || updPayload?.port;
                 showInterfaceSuccess("edited", currentInterface, finalPort);
+                
+                // Re-initialize tooltips after update
+                if (typeof initHelpTooltips === "function") {
+                  try {
+                    setTimeout(() => initHelpTooltips(document), 100);
+                  } catch (_) {}
+                }
               } else {
                 // Keep modal open; inform user nothing changed and reflect via button label
                 showToast("No changes detected");
@@ -3372,6 +3552,31 @@
             icon.dispatchEvent(new Event("mouseleave"))
           );
         });
+        
+        // Also initialize tooltips for status pills with data-help
+        const pills = scope.querySelectorAll(".status-pill[data-help]");
+        pills.forEach((pill) => {
+          pill.addEventListener("mouseenter", () => {
+            const msg = pill.getAttribute("data-help");
+            if (!msg) return;
+            const tt = ensureHelpTooltip();
+            tt.textContent = msg;
+            tt.classList.add("visible");
+            // Temporarily set for measurement
+            tt.style.top = "0px";
+            tt.style.left = "0px";
+            requestAnimationFrame(() => positionHelpTooltip(pill));
+          });
+          pill.addEventListener("mouseleave", () => {
+            if (helpTooltipEl) helpTooltipEl.classList.remove("visible");
+          });
+          pill.addEventListener("focus", () =>
+            pill.dispatchEvent(new Event("mouseenter"))
+          );
+          pill.addEventListener("blur", () =>
+            pill.dispatchEvent(new Event("mouseleave"))
+          );
+        });
       }
       if (btnOpenAddInterface)
         btnOpenAddInterface.addEventListener("click", openAddInterfaceModal);
@@ -3614,6 +3819,13 @@
             loadInterfaces();
           } catch (_) {}
         }, 5000);
+        
+        // Initialize tooltips on page load
+        if (typeof initHelpTooltips === "function") {
+          try {
+            initHelpTooltips(document);
+          } catch (_) {}
+        }
       })();
       // Clicking the top-left PyGuard logo/title resets selection to initial state
       function resetToInitialState() {
