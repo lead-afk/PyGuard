@@ -441,6 +441,37 @@ def ensure_core_installed():
     ensure_wireguard_installed()
 
 
+def process_dns_field(dns_field: str, data: dict) -> str:
+    """
+    Mainly for user to write "host" so internal DNS chooses DNS hosted on host.
+    Otherwise chooses the most appropriate DNS server IP based on environment and settings.
+    """
+    ensure_root()
+    if dns_field == "host":
+        if os.getenv("PYGUARD_IN_DOCKER") == "1":
+            if data.get("dns_service", False):
+                dns_field = get_local_gateway()[0]
+            elif data.get("forward_to_docker_bridge", False):
+                dns_field = data.get("server", {}).get("ip", DEFAULT_DNS)
+            else:
+                dns_field = DEFAULT_DNS
+        else:
+            # On host, use the host's current DNS
+            resolv_conf = "/etc/resolv.conf"
+            if os.path.exists(resolv_conf):
+                with open(resolv_conf, "r") as f:
+                    for line in f:
+                        if line.startswith("nameserver"):
+                            parts = line.split()
+                            if len(parts) >= 2 and is_ip(parts[1]):
+                                dns_field = parts[1]
+                                break
+            else:
+                dns_field = DEFAULT_DNS
+
+    return dns_field
+
+
 def load_data(interface: str) -> dict:
     """Load (or initialize) data for the specified interface.
 
@@ -1731,7 +1762,7 @@ def generate_peer_config(interface: str, name: str) -> str | None:
     return f"""[Interface]
 PrivateKey = {peer['private_key']}
 Address = {peer['ip']}/{server['network'].split('/')[1]}
-DNS = {dns_ip}
+DNS = {process_dns_field(dns_ip, data)}
 
 [Peer]
 PublicKey = {server['public_key']}

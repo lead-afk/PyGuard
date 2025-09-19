@@ -8,7 +8,13 @@ import socket
 import struct
 import threading
 import ipaddress
-from pyguard import BASE_DATA_DIR, list_interfaces, is_interface_active, load_data
+from pyguard import (
+    BASE_DATA_DIR,
+    list_interfaces,
+    is_interface_active,
+    load_data,
+    process_dns_field,
+)
 
 
 def resolve_domain(domain, dns_server="8.8.8.8"):
@@ -220,7 +226,7 @@ reload_lock = threading.Lock()
 def reload_dns_config(specific_iface=None):
     with reload_lock:
 
-        active_networks = {}
+        active_networks = []
         global active_listeners
         print("Reloading DNS configuration...")
         interfaces = list_interfaces()
@@ -228,11 +234,7 @@ def reload_dns_config(specific_iface=None):
             interface = iface.get("name")
 
             if iface.get("dns_service"):
-                active_networks[iface.get("server", {}).get("network")] = (
-                    "active",
-                    "not_changed",
-                    "",
-                )
+                active_networks.append(iface.get("network"))
             else:
                 print(f"DNS service not enabled for interface {interface}, skipping.")
                 continue
@@ -260,38 +262,34 @@ def reload_dns_config(specific_iface=None):
 
             print(f"Interface {interface} DNS records: {records}")
 
-            active_networks[network] = (
-                data.get("server", {}).get("ip", "0.0.0.0"),
-                records,
-                data.get("server", {}).get("dns", "1.1.1.1"),
-            )
+            dns = process_dns_field(data.get("server", {}).get("dns", "1.1.1.1"))
+            ip = data.get("server", {}).get("ip")
 
-        for net, (ip, records, dns) in active_networks.items():
-            if ip == "active" and records == "not_changed":
-                continue  # skip, already active and unchanged
-            if net in active_listeners:
-                if active_listeners[net].records and set(
-                    active_listeners[net].records.items()
+            if network in active_listeners:
+                if active_listeners[network].records and set(
+                    active_listeners[network].records.items()
                 ) != set(records.items()):
                     print(
-                        f"Updating DNS records for network {net}, new records: {records}"
+                        f"Updating DNS records for network {network}, new records: {records}"
                     )
-                    active_listeners[net].update_records(records)
-                if active_listeners[net].upstream_dns != dns:
+                    active_listeners[network].update_records(records)
+                if active_listeners[network].upstream_dns != process_dns_field(
+                    dns, data
+                ):
                     print(
-                        f"Updating upstream DNS server for network {net}, changing to {dns}"
+                        f"Updating upstream DNS server for network {network}, changing to {dns}"
                     )
-                    active_listeners[net].update_upstream_dns(dns)
+                    active_listeners[network].update_upstream_dns(dns)
             else:
-                print(f"Starting DNS server for network {net}")
+                print(f"Starting DNS server for network {network}")
                 dns_server = DNSServer(ip, records, upstream_dns=dns)
-                active_listeners[net] = dns_server
+                active_listeners[network] = dns_server
 
-        for net, dns_server in list(active_listeners.items()):
-            if net not in active_networks:
-                print(f"Stopping DNS server for network {net}")
+        for network, dns_server in list(active_listeners.items()):
+            if network not in active_networks:
+                print(f"Stopping DNS server for network {network}")
                 dns_server.stop()
-                del active_listeners[net]
+                del active_listeners[network]
 
 
 class ChangeHandler(FileSystemEventHandler):
