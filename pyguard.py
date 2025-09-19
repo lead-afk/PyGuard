@@ -90,14 +90,18 @@ def load_settings():
 
     return settings
 
+
 def yellow(text):
     return f"\033[93m{text}\033[0m"
+
 
 def red(text):
     return f"\033[91m{text}\033[0m"
 
+
 def green(text):
     return f"\033[92m{text}\033[0m"
+
 
 def ensure_root():
     """Exit if not root on POSIX systems (WireGuard + file permissions require root).
@@ -177,6 +181,7 @@ def list_interfaces(as_json: bool = False, print_output: bool = False):  # ???
                     "peer_count": len(data.get("peers", {})),
                     "active": active,
                     "launch_on_start": data.get("launch_on_start", False),
+                    "dns_service": data.get("dns_service", False),
                 }
             )
         except Exception:
@@ -981,12 +986,17 @@ def init_server(
     net = ipaddress.ip_network(network)
     data["server"]["ip"] = net.hosts().__next__().exploded
 
-
     data["allow_vpn_gateway"] = allow_vpn_gateway
     data["dns_service"] = enable_dns_service
     if forward_to_docker_bridge and not os.getenv("PYGUARD_IN_DOCKER") == "1":
-        print(yellow("Warning: Forwarding to Docker bridge is enabled but not running in Docker."))
-        print(yellow("If you are sure you want this, update the setting manually later."))
+        print(
+            yellow(
+                "Warning: Forwarding to Docker bridge is enabled but not running in Docker."
+            )
+        )
+        print(
+            yellow("If you are sure you want this, update the setting manually later.")
+        )
     else:
         data["forward_to_docker_bridge"] = forward_to_docker_bridge
 
@@ -2154,22 +2164,24 @@ def update_config(interface: str, target: str, parameter: str, value: str):
     if target == "network":
         try:
             new_net = ipaddress.ip_network(value)
-            data["server"]["network"] = value
+            data["server"]["network"] = str(new_net)
             data["server"]["ip"] = new_net.hosts().__next__().exploded
-            try:
-                current_ip = ipaddress.ip_address(data["server"].get("ip", "0.0.0.0"))
-                if current_ip not in new_net:
-                    data["server"]["ip"] = str(next(new_net.hosts()))
-                    print(f"Server IP moved to {data['server']['ip']}")
-            except ValueError:
-                data["server"]["ip"] = str(next(new_net.hosts()))
-                print(f"Server IP set to {data['server']['ip']}")
+            # try:
+            #     current_ip = ipaddress.ip_address(data["server"].get("ip", "0.0.0.0"))
+            #     if current_ip not in new_net:
+            #         data["server"]["ip"] = str(next(new_net.hosts()))
+            #         print(f"Server IP moved to {data['server']['ip']}")
+            # except ValueError:
+            #     data["server"]["ip"] = str(next(new_net.hosts()))
+            #     print(f"Server IP set to {data['server']['ip']}")
 
-            for peer_name in data.get("peers", {}).keys():
-                peer = data.get("peers", {}).get(peer_name, {})
+            for peer_name, peer in data.get("peers", {}).items():
                 if ipaddress.ip_address(peer["ip"]) not in new_net:
                     peer["ip"] = get_next_ip(interface, value)
                     print(f"Peer {peer_name} IP moved to {peer['ip']}")
+
+                if not new_net.subnet_of(ipaddress.ip_network(peer["allowed_ips"])):
+                    peer["allowed_ips"] = data.get("server", {}).get("network")
 
             save_data(interface, data)
             print(f"Network updated: {value}")
@@ -2396,7 +2408,8 @@ def main():
             )
             return
         args = sys.argv[2:]
-        interface = port = net = pub = allow_gateway = enable_dns = forward_to_bridge = None
+        interface = port = net = pub = None
+        allow_gateway = enable_dns = forward_to_bridge = False
         i = 0
         while i < len(args):
             if i == 0:
@@ -2414,20 +2427,28 @@ def main():
                 pub = args[i + 1]
                 i += 2
                 continue
-            if a in ("--allow-vpn-gateway", "-g") :
+            if a in ("--allow-vpn-gateway", "-g"):
                 allow_gateway = True
                 i += 1
                 continue
-            if a in ("--dns-service", "--enable-dns-service", "-d") :
+            if a in ("--dns-service", "--enable-dns-service", "-d"):
                 enable_dns = True
                 i += 1
                 continue
-            if a in ("--forward-to-docker-bridge", "-b") :                    
+            if a in ("--forward-to-docker-bridge", "-b"):
                 forward_to_bridge = True
                 i += 1
                 continue
             i += 1
-        init_server(interface, port=port, network=net, public_ip=pub, allow_vpn_gateway=allow_gateway, enable_dns_service=enable_dns, forward_to_docker_bridge=forward_to_bridge)
+        init_server(
+            interface,
+            port=port,
+            network=net,
+            public_ip=pub,
+            allow_vpn_gateway=allow_gateway,
+            enable_dns_service=enable_dns,
+            forward_to_docker_bridge=forward_to_bridge,
+        )
         return
     elif sys.argv[1] == "delete":
         to_delete = sys.argv[2:]
@@ -2522,24 +2543,44 @@ def main():
             if not "-y" in args and not os.getenv("PYGUARD_IN_DOCKER") == "1":
                 ip, name = get_local_gateway()
                 print(red("Warning this will likely break stuff outside of Docker!"))
-                print(yellow(f"All trafic destined for the WireGuard interface relay will be forwarded to {ip} the {name}, probably the ISP router which will drop the packets."))
-                print(yellow("It is only useful if you run PyGuard inside Docker and want to access other containers on the host."))
-                print(yellow("Can potentially be used on a non-Docker host if you want to hide the interface relay (UNTESTED)."))
+                print(
+                    yellow(
+                        f"All trafic destined for the WireGuard interface relay will be forwarded to {ip} the {name}, probably the ISP router which will drop the packets."
+                    )
+                )
+                print(
+                    yellow(
+                        "It is only useful if you run PyGuard inside Docker and want to access other containers on the host."
+                    )
+                )
+                print(
+                    yellow(
+                        "Can potentially be used on a non-Docker host if you want to hide the interface relay (UNTESTED)."
+                    )
+                )
                 confirm = input("Are you sure? Type 'yes' to continue: ")
                 if confirm.lower() != "yes":
                     print("Aborted.")
                     return
             if not args:
-                print("Usage: pyguard <iface> forward_to_docker_bridge <enable|disable>")
+                print(
+                    "Usage: pyguard <iface> forward_to_docker_bridge <enable|disable>"
+                )
                 return
             val = args[0]
             if val.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
                 update_config(
-                    interface, "forward_to_docker_bridge", "forward_to_docker_bridge", "enable"
+                    interface,
+                    "forward_to_docker_bridge",
+                    "forward_to_docker_bridge",
+                    "enable",
                 )
             else:
                 update_config(
-                    interface, "forward_to_docker_bridge", "forward_to_docker_bridge", "disable"
+                    interface,
+                    "forward_to_docker_bridge",
+                    "forward_to_docker_bridge",
+                    "disable",
                 )
         elif command == "allow_vpn_gateway":
             if not args:
@@ -2547,10 +2588,14 @@ def main():
                 return
             val = args[0]
             if val.lower() in ("1", "true", "yes", "on", "enable", "enabled"):
-                update_config(interface, "allow_vpn_gateway", "allow_vpn_gateway", "enable")
+                update_config(
+                    interface, "allow_vpn_gateway", "allow_vpn_gateway", "enable"
+                )
             else:
-                update_config(interface, "allow_vpn_gateway", "allow_vpn_gateway", "disable")
-        
+                update_config(
+                    interface, "allow_vpn_gateway", "allow_vpn_gateway", "disable"
+                )
+
         elif command == "custom":
             if len(args) < 2:
                 print(

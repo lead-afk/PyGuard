@@ -170,6 +170,7 @@ class DNSServer:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((self.ip, 53))
         # self.sock.bind(("0.0.0.0", 53))
+        self.sock.settimeout(1.0)
         self.running = True
         self.upstream_dns = upstream_dns
         self.thread = threading.Thread(target=self.run)
@@ -177,7 +178,12 @@ class DNSServer:
 
     def run(self):
         while self.running:
-            data, addr = self.sock.recvfrom(512)
+            try:
+                data, addr = self.sock.recvfrom(512)
+            except socket.timeout:
+                continue  # check self.running again
+            except OSError:
+                break  # socket closed, exit thread
             with self.records_lock:
                 response = build_dns_response(
                     data, self.records, upstream_dns=self.upstream_dns
@@ -188,6 +194,7 @@ class DNSServer:
         self.running = False
         self.sock.close()
         self.thread.join()
+        print(f"DNS server on {self.ip} stopped.")
 
     def start(self):
         if not self.running:
@@ -206,92 +213,85 @@ class DNSServer:
             self.upstream_dns = dns_server
 
 
-main_dict = {}
+active_listeners = {}
+reload_lock = threading.Lock()
 
 
 def reload_dns_config(specific_iface=None):
+    with reload_lock:
 
-    interfaces = list_interfaces()
-    for iface in interfaces:
-        if specific_iface and iface["name"] != specific_iface:
-            continue
-        if iface.get("active", False):
-            name = iface["name"]
-            data = load_data(name)
+        active_networks = {}
+        global active_listeners
+        print("Reloading DNS configuration...")
+        interfaces = list_interfaces()
+        for iface in interfaces:
+            interface = iface.get("name")
 
-            # if not data.get("dns_service", False) and False:  # Disabled for now
-            #     continue
-
-            new_records = {f"relay.{name}": data.get("server", {}).get("ip")}
-            for peer_name in data.get("peers", {}):
-                peer = data.get("peers", {}).get(peer_name, {})
-                ip = peer.get("ip")
-                if ip:
-                    try:
-                        ip_obj = ipaddress.ip_address(ip)
-                        if isinstance(ip_obj, ipaddress.IPv4Address):
-                            new_records[str(peer_name) + "." + str(name)] = str(ip)
-                    except ValueError:
-                        continue
-
-            network = data.get("server", {}).get("network")
-            if not network:
+            if iface.get("dns_service"):
+                active_networks[iface.get("server", {}).get("network")] = (
+                    "active",
+                    "not_changed",
+                    "",
+                )
+            else:
+                print(f"DNS service not enabled for interface {interface}, skipping.")
                 continue
 
-            same = True
+            if specific_iface and specific_iface != interface:
+                continue
+            if not iface.get("active", False):
+                print(f"Interface {interface} is not active, skipping.")
+                continue
 
-            if network not in main_dict:
-                main_dict[network] = {}
-                same = False
+            data = load_data(interface)
 
-            existing_records = main_dict[network].get("records", [])
+            if not data:
+                print(f"No config found for interface {interface}, skipping.")
+                continue
 
-            if set(new_records) != set(existing_records):
-                print("Records sets differ")
-                same = False
-
-            print(f"DNS records for {network} ({name}): {new_records}")
-
-            if not same:
-                main_dict[network]["records"] = new_records
-                if not main_dict[network].get("dns_server"):
-                    print(f"Starting DNS server on {network} ({name})")
-                    dns_ip = data.get("server", {}).get("ip")
-                    main_dict[network]["dns_server"] = DNSServer(
-                        ip=dns_ip, records=new_records
-                    )
-                elif main_dict[network].get("dns_server"):
-                    print(f"Restarting DNS server on {network} ({name})")
-                    main_dict[network]["dns_server"].update_records(new_records)
-            else:
-                print(f"No changes for DNS server on {network} ({name})")
-
-            if not main_dict[network].get("dns_server"):
-                print(f"Starting DNS server on {network} ({name})")
-                dns_ip = data.get("server", {}).get("ip")
-                main_dict[network]["dns_server"] = DNSServer(
-                    ip=dns_ip, records=new_records
-                )
-
-            if main_dict[network].get("dns_server").upstream_dns != data.get(
-                "server", {}
-            ).get("dns"):
-                print(f"Updating upstream DNS server on {network} ({name})")
-                main_dict[network]["dns_server"].update_upstream_dns(
-                    data.get("server", {}).get("dns")
-                )
-
-        else:
-            print(
-                f"Interface {iface['name']} is not active, stopping DNS server if running."
-            )
-            data = load_data(iface["name"])
             network = data.get("server", {}).get("network")
-            if network and main_dict.get(network):
-                if main_dict[network].get("dns_server"):
-                    main_dict[network]["dns_server"].stop()
-                    del main_dict[network]["dns_server"]
-                del main_dict[network]
+            if not data.get("server", {}).get("ip"):
+                print(f"No server IP configured for interface {interface}, skipping.")
+                continue
+            records = {f"relay.{interface}": data.get("server", {}).get("ip")}
+
+            for peer_name, peer in data.get("peers", {}).items():
+                records[f"{peer_name}.{interface}"] = peer.get("ip", "0.0.0.0")
+
+            print(f"Interface {interface} DNS records: {records}")
+
+            active_networks[network] = (
+                data.get("server", {}).get("ip", "0.0.0.0"),
+                records,
+                data.get("server", {}).get("dns", "1.1.1.1"),
+            )
+
+        for net, (ip, records, dns) in active_networks.items():
+            if ip == "active" and records == "not_changed":
+                continue  # skip, already active and unchanged
+            if net in active_listeners:
+                if active_listeners[net].records and set(
+                    active_listeners[net].records.items()
+                ) != set(records.items()):
+                    print(
+                        f"Updating DNS records for network {net}, new records: {records}"
+                    )
+                    active_listeners[net].update_records(records)
+                if active_listeners[net].upstream_dns != dns:
+                    print(
+                        f"Updating upstream DNS server for network {net}, changing to {dns}"
+                    )
+                    active_listeners[net].update_upstream_dns(dns)
+            else:
+                print(f"Starting DNS server for network {net}")
+                dns_server = DNSServer(ip, records, upstream_dns=dns)
+                active_listeners[net] = dns_server
+
+        for net, dns_server in list(active_listeners.items()):
+            if net not in active_networks:
+                print(f"Stopping DNS server for network {net}")
+                dns_server.stop()
+                del active_listeners[net]
 
 
 class ChangeHandler(FileSystemEventHandler):
