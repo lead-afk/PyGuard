@@ -1277,8 +1277,22 @@
                 </div>
                 <div class="peer-detail-panel hidden" id="peerDetailPanel">
                   <div class="peer-detail-header" style="gap: 10px">
-                    <h3 id="peerDetailTitle" style="flex: 1; display:flex; align-items:center; gap:8px;">Peer
-                      <span class="help-icon" id="peerNameHelp" data-help="Note: On some Linux distributions the wireguard CLI (wg-quick) may modify resolv.conf or interact poorly when a DNS= line is present in a peer config, causing host DNS resolution issues. If you experience broken DNS after bringing an interface up, try removing the DNS line from the peer config and configuring DNS at the system or VPN server level instead.">?</span>
+                    <h3
+                      id="peerDetailTitle"
+                      style="
+                        flex: 1;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                      "
+                    >
+                      Peer
+                      <span
+                        class="help-icon"
+                        id="peerNameHelp"
+                        data-help="Note: On some Linux distributions the wireguard CLI (wg-quick) may modify resolv.conf or interact poorly when a DNS= line is present in a peer config, causing host DNS resolution issues. If you experience broken DNS after bringing an interface up, try removing the DNS line from the peer config and configuring DNS at the system or VPN server level instead."
+                        >?</span
+                      >
                     </h3>
                     <span
                       id="peerDetailStatusPill"
@@ -1387,9 +1401,9 @@
       const ifaceTitle = document.getElementById("ifaceTitle");
       const ifaceMeta = document.getElementById("ifaceStats");
       const ifaceActivePill = document.getElementById("ifaceActivePill");
-  const ifaceDnsPill = document.getElementById("ifaceDnsPill");
-  const ifaceDockerPill = document.getElementById("ifaceDockerPill");
-  const ifaceGatewayPill = document.getElementById("ifaceGatewayPill");
+      const ifaceDnsPill = document.getElementById("ifaceDnsPill");
+      const ifaceDockerPill = document.getElementById("ifaceDockerPill");
+      const ifaceGatewayPill = document.getElementById("ifaceGatewayPill");
       const islandEl = document.getElementById("island");
       const logoTitle = document.querySelector(".top-bar .logo-title");
       const peersContainer = document.getElementById("peersContainer");
@@ -1723,7 +1737,11 @@
           // Update feature pills (DNS, Docker forward, VPN gateway)
           const dnsOn = !!(s["dns_service"] ?? s.dns_service ?? false);
           const dockerOn = !!(s.forward_to_docker_bridge ?? false);
-          const gwOn = !!(s["allow_vpn_gateway"] ?? s.allow_vpn_gateway ?? false);
+          const gwOn = !!(
+            s["allow_vpn_gateway"] ??
+            s.allow_vpn_gateway ??
+            false
+          );
           // DNS: always visible when interface selected
           if (ifaceDnsPill) {
             ifaceDnsPill.style.display = "inline-block";
@@ -1738,14 +1756,19 @@
             ifaceDnsPill.title = dnsMsg;
             ifaceDnsPill.setAttribute("data-help", dnsMsg);
             try {
-              if (ifaceDnsPill.matches(":hover") || document.activeElement === ifaceDnsPill) {
+              if (
+                ifaceDnsPill.matches(":hover") ||
+                document.activeElement === ifaceDnsPill
+              ) {
                 ifaceDnsPill.dispatchEvent(new Event("mouseenter"));
               }
             } catch (_) {}
           }
           // Docker forward: only when running in Docker mode
           if (ifaceDockerPill) {
-            const inDocker = window.PYGUARD_IN_DOCKER === 1 || window.PYGUARD_IN_DOCKER === true;
+            const inDocker =
+              window.PYGUARD_IN_DOCKER === 1 ||
+              window.PYGUARD_IN_DOCKER === true;
             ifaceDockerPill.style.display = inDocker ? "inline-block" : "none";
             if (inDocker) {
               ifaceDockerPill.classList.toggle("on", dockerOn);
@@ -1758,7 +1781,10 @@
               ifaceDockerPill.title = dockMsg;
               ifaceDockerPill.setAttribute("data-help", dockMsg);
               try {
-                if (ifaceDockerPill.matches(":hover") || document.activeElement === ifaceDockerPill) {
+                if (
+                  ifaceDockerPill.matches(":hover") ||
+                  document.activeElement === ifaceDockerPill
+                ) {
                   ifaceDockerPill.dispatchEvent(new Event("mouseenter"));
                 }
               } catch (_) {}
@@ -1777,7 +1803,10 @@
             ifaceGatewayPill.title = gwMsg;
             ifaceGatewayPill.setAttribute("data-help", gwMsg);
             try {
-              if (ifaceGatewayPill.matches(":hover") || document.activeElement === ifaceGatewayPill) {
+              if (
+                ifaceGatewayPill.matches(":hover") ||
+                document.activeElement === ifaceGatewayPill
+              ) {
                 ifaceGatewayPill.dispatchEvent(new Event("mouseenter"));
               }
             } catch (_) {}
@@ -1835,8 +1864,8 @@
               last_handshake_str: info.last_handshake_str || "",
               // NOTE: From relay/server perspective the original fields reflect server rx/tx.
               // UI labels were swapped to show Upload(from peer)->server as 'Upload' first.
-              download: info.download || "0 KiB",   // bytes received by server from peer (peer upload)
-              uploaded: info.uploaded || "0 KiB",   // bytes sent by server to peer (peer download)
+              download: info.download || "0 KiB", // bytes received by server from peer (peer upload)
+              uploaded: info.uploaded || "0 KiB", // bytes sent by server to peer (peer download)
             };
           });
           console.debug("Loaded peers (with status)", peers);
@@ -1844,7 +1873,7 @@
         } finally {
           peerLoading.style.display = "none";
         }
-        
+
         // Initialize tooltips for pills after loading interface
         if (typeof initHelpTooltips === "function") {
           try {
@@ -1876,18 +1905,20 @@
           el.dataset.name = p.name;
           const pill = `<span class=\"status-pill small ${
             p.active ? "ok" : "bad"
-          }\" title=\"${p.active ? "Online" : "Offline"}\" data-help=\"${p.active ? "This peer has had a recent handshake with the server and is considered online." : "This peer has not had a recent handshake or has been offline for more than 10 minutes."}\">${
-            p.active ? "online" : "offline"
-          }</span>`;
+          }\" title=\"${p.active ? "Online" : "Offline"}\" data-help=\"${
+            p.active
+              ? "This peer has had a recent handshake with the server and is considered online."
+              : "This peer has not had a recent handshake or has been offline for more than 10 minutes."
+          }\">${p.active ? "online" : "offline"}</span>`;
           const showKey = p.public_key && p.public_key !== p.name;
           const keyFrag = showKey
-            ? `<span>${(p.public_key || "").slice(0,14)}...</span>`
+            ? `<span>${(p.public_key || "").slice(0, 14)}...</span>`
             : "";
           el.innerHTML = `<div class="line1"><span style="display:flex;align-items:center;gap:6px;"><span>${p.name}</span></span><span>${pill}</span></div><div class="line2">${keyFrag}<span>U:${p.download} D:${p.uploaded}</span></div>`;
           el.onclick = () => openPeer(p.public_key || p.name);
           peersContainer.appendChild(el);
         });
-        
+
         // Initialize tooltips for newly rendered peer pills
         if (typeof initHelpTooltips === "function") {
           try {
@@ -1981,11 +2012,13 @@
             if (peerDetailPanel) {
               // Update peer detail title while preserving the embedded help icon
               if (peerDetailTitle) {
-                const helpIcon = peerDetailTitle.querySelector('#peerNameHelp');
+                const helpIcon = peerDetailTitle.querySelector("#peerNameHelp");
                 peerDetailTitle.innerHTML = `${p.name}`;
                 if (helpIcon) peerDetailTitle.appendChild(helpIcon);
+                // Store clean name separate from visible text (which includes help icon '?')
+                peerDetailTitle.dataset.peerName = p.name;
               }
-              if (typeof initHelpTooltips === 'function') {
+              if (typeof initHelpTooltips === "function") {
                 const scope = peerDetailTitle?.parentElement || document;
                 initHelpTooltips(scope);
               }
@@ -2016,9 +2049,12 @@
                   ? "online"
                   : "offline";
                 peerDetailStatusPill.title = online ? "Online" : "Offline";
-                peerDetailStatusPill.setAttribute("data-help", online 
-                  ? "This peer has had a recent handshake with the server and is considered online." 
-                  : "This peer has not had a recent handshake or has been offline for more than 10 minutes.");
+                peerDetailStatusPill.setAttribute(
+                  "data-help",
+                  online
+                    ? "This peer has had a recent handshake with the server and is considered online."
+                    : "This peer has not had a recent handshake or has been offline for more than 10 minutes."
+                );
               }
             }
           } else {
@@ -2040,11 +2076,13 @@
             if (serverEpEl) serverEpEl.value = "";
             if (peerDetailPanel) {
               if (peerDetailTitle) {
-                const helpIcon = peerDetailTitle.querySelector('#peerNameHelp');
+                const helpIcon = peerDetailTitle.querySelector("#peerNameHelp");
                 peerDetailTitle.innerHTML = `${p.name}`;
                 if (helpIcon) peerDetailTitle.appendChild(helpIcon);
+                // Keep a clean copy of name for programmatic use
+                peerDetailTitle.dataset.peerName = p.name;
               }
-              if (typeof initHelpTooltips === 'function') {
+              if (typeof initHelpTooltips === "function") {
                 const scope = peerDetailTitle?.parentElement || document;
                 initHelpTooltips(scope);
               }
@@ -2064,9 +2102,12 @@
                   ? "online"
                   : "offline";
                 peerDetailStatusPill.title = p.active ? "Online" : "Offline";
-                peerDetailStatusPill.setAttribute("data-help", p.active 
-                  ? "This peer has had a recent handshake with the server and is considered online." 
-                  : "This peer has not had a recent handshake or has been offline for more than 10 minutes.");
+                peerDetailStatusPill.setAttribute(
+                  "data-help",
+                  p.active
+                    ? "This peer has had a recent handshake with the server and is considered online."
+                    : "This peer has not had a recent handshake or has been offline for more than 10 minutes."
+                );
               }
             }
           }
@@ -2100,7 +2141,15 @@
             detailEndpoint.value = detail.peer_data.endpoint;
           }
           // Update peer detail panel fields if still selected
-          if (peerDetailTitle.textContent.trim() === currentPeerName) {
+          const titleName =
+            peerDetailTitle &&
+            peerDetailTitle.dataset &&
+            peerDetailTitle.dataset.peerName
+              ? peerDetailTitle.dataset.peerName
+              : peerDetailTitle
+              ? peerDetailTitle.textContent.trim()
+              : "";
+          if (titleName === currentPeerName) {
             // traffic + handshake
             detailDownload.value =
               runtime.rx_human ||
@@ -2143,7 +2192,7 @@
                 const showKey =
                   peerObj.public_key && peerObj.public_key !== peerObj.name;
                 const keyFrag = showKey
-                  ? `<span>${(peerObj.public_key || "").slice(0,14)}...</span>`
+                  ? `<span>${(peerObj.public_key || "").slice(0, 14)}...</span>`
                   : "";
                 line2.innerHTML = `${keyFrag}<span>D:${peerObj.download} U:${peerObj.uploaded}</span>`;
               }
@@ -2153,9 +2202,12 @@
                 pillEl.classList.toggle("bad", !peers[idx].active);
                 pillEl.textContent = peers[idx].active ? "online" : "offline";
                 pillEl.title = peers[idx].active ? "Online" : "Offline";
-                pillEl.setAttribute("data-help", peers[idx].active 
-                  ? "This peer has had a recent handshake with the server and is considered online." 
-                  : "This peer has not had a recent handshake or has been offline for more than 10 minutes.");
+                pillEl.setAttribute(
+                  "data-help",
+                  peers[idx].active
+                    ? "This peer has had a recent handshake with the server and is considered online."
+                    : "This peer has not had a recent handshake or has been offline for more than 10 minutes."
+                );
               }
             }
           });
@@ -2170,9 +2222,12 @@
             peerDetailStatusPill.classList.toggle("bad", !online);
             peerDetailStatusPill.textContent = online ? "online" : "offline";
             peerDetailStatusPill.title = online ? "Online" : "Offline";
-            peerDetailStatusPill.setAttribute("data-help", online 
-              ? "This peer has had a recent handshake with the server and is considered online." 
-              : "This peer has not had a recent handshake or has been offline for more than 10 minutes.");
+            peerDetailStatusPill.setAttribute(
+              "data-help",
+              online
+                ? "This peer has had a recent handshake with the server and is considered online."
+                : "This peer has not had a recent handshake or has been offline for more than 10 minutes."
+            );
           }
         } catch (e) {
           /* ignore refresh errors */
@@ -3069,7 +3124,11 @@
                 ifaceActivePill.classList.toggle("ok", isActive);
                 ifaceActivePill.classList.toggle("bad", !isActive);
                 ifaceActivePill.textContent = isActive ? "active" : "inactive";
-                const nm = currentInterface || updatedName || nd?.interface || "interface";
+                const nm =
+                  currentInterface ||
+                  updatedName ||
+                  nd?.interface ||
+                  "interface";
                 ifaceActivePill.title = isActive
                   ? `Interface ${nm} is up and running`
                   : `Interface ${nm} is not turned on, bring it up by pressing enable button`;
@@ -3092,7 +3151,11 @@
               (function updateFeaturePillsAfterUpdate() {
                 const dnsOn = !!(s["dns_service"] ?? s.dns_service ?? false);
                 const dockerOn = !!(s.forward_to_docker_bridge ?? false);
-                const gwOn = !!(s["allow_vpn_gateway"] ?? s.allow_vpn_gateway ?? false);
+                const gwOn = !!(
+                  s["allow_vpn_gateway"] ??
+                  s.allow_vpn_gateway ??
+                  false
+                );
                 if (ifaceDnsPill) {
                   ifaceDnsPill.style.display = "inline-block";
                   ifaceDnsPill.classList.toggle("on", dnsOn);
@@ -3106,14 +3169,21 @@
                   ifaceDnsPill.title = dnsMsg;
                   ifaceDnsPill.setAttribute("data-help", dnsMsg);
                   try {
-                    if (ifaceDnsPill.matches(":hover") || document.activeElement === ifaceDnsPill) {
+                    if (
+                      ifaceDnsPill.matches(":hover") ||
+                      document.activeElement === ifaceDnsPill
+                    ) {
                       ifaceDnsPill.dispatchEvent(new Event("mouseenter"));
                     }
                   } catch (_) {}
                 }
                 if (ifaceDockerPill) {
-                  const inDocker = window.PYGUARD_IN_DOCKER === 1 || window.PYGUARD_IN_DOCKER === true;
-                  ifaceDockerPill.style.display = inDocker ? "inline-block" : "none";
+                  const inDocker =
+                    window.PYGUARD_IN_DOCKER === 1 ||
+                    window.PYGUARD_IN_DOCKER === true;
+                  ifaceDockerPill.style.display = inDocker
+                    ? "inline-block"
+                    : "none";
                   if (inDocker) {
                     ifaceDockerPill.classList.toggle("on", dockerOn);
                     ifaceDockerPill.classList.toggle("off", !dockerOn);
@@ -3125,7 +3195,10 @@
                     ifaceDockerPill.title = dockMsg;
                     ifaceDockerPill.setAttribute("data-help", dockMsg);
                     try {
-                      if (ifaceDockerPill.matches(":hover") || document.activeElement === ifaceDockerPill) {
+                      if (
+                        ifaceDockerPill.matches(":hover") ||
+                        document.activeElement === ifaceDockerPill
+                      ) {
                         ifaceDockerPill.dispatchEvent(new Event("mouseenter"));
                       }
                     } catch (_) {}
@@ -3143,7 +3216,10 @@
                   ifaceGatewayPill.title = gwMsg;
                   ifaceGatewayPill.setAttribute("data-help", gwMsg);
                   try {
-                    if (ifaceGatewayPill.matches(":hover") || document.activeElement === ifaceGatewayPill) {
+                    if (
+                      ifaceGatewayPill.matches(":hover") ||
+                      document.activeElement === ifaceGatewayPill
+                    ) {
                       ifaceGatewayPill.dispatchEvent(new Event("mouseenter"));
                     }
                   } catch (_) {}
@@ -3213,7 +3289,7 @@
                 const finalPort =
                   currentServer?.port || s.port || updPayload?.port;
                 showInterfaceSuccess("edited", currentInterface, finalPort);
-                
+
                 // Re-initialize tooltips after update
                 if (typeof initHelpTooltips === "function") {
                   try {
@@ -3344,9 +3420,12 @@
           if (chk) chk.removeAttribute("disabled");
           const chkDns = addInterfaceModalMount.querySelector("#aimDnsService");
           if (chkDns) chkDns.removeAttribute("disabled");
-          const chkFwd = addInterfaceModalMount.querySelector("#aimForwardDocker");
+          const chkFwd =
+            addInterfaceModalMount.querySelector("#aimForwardDocker");
           if (chkFwd) chkFwd.removeAttribute("disabled");
-          const chkGw = addInterfaceModalMount.querySelector("#aimAllowVpnGateway");
+          const chkGw = addInterfaceModalMount.querySelector(
+            "#aimAllowVpnGateway"
+          );
           if (chkGw) chkGw.removeAttribute("disabled");
           isLoading = false;
           form?.setAttribute("data-loading", "0");
@@ -3378,15 +3457,14 @@
           const public_ip = (
             addInterfaceModalMount.querySelector("#aimPublicIP")?.value || ""
           ).trim();
-          const enable_dns_service = !!addInterfaceModalMount.querySelector(
-            "#aimDnsService"
-          )?.checked;
+          const enable_dns_service =
+            !!addInterfaceModalMount.querySelector("#aimDnsService")?.checked;
           const allow_vpn_gateway = !!addInterfaceModalMount.querySelector(
             "#aimAllowVpnGateway"
           )?.checked;
-          const forward_to_docker_bridge = !!addInterfaceModalMount.querySelector(
-            "#aimForwardDocker"
-          )?.checked;
+          const forward_to_docker_bridge =
+            !!addInterfaceModalMount.querySelector("#aimForwardDocker")
+              ?.checked;
           const ignore =
             !!addInterfaceModalMount.querySelector("#aimIgnore")?.checked;
           const port = parseInt(portStr, 10);
@@ -3430,11 +3508,9 @@
             createBody.enable_dns_service = enable_dns_service;
             createBody.allow_vpn_gateway = allow_vpn_gateway;
             if (
-              addInterfaceModalMount.querySelector("#aimForwardDocker") !==
-              null
+              addInterfaceModalMount.querySelector("#aimForwardDocker") !== null
             ) {
-              createBody.forward_to_docker_bridge =
-                !!forward_to_docker_bridge;
+              createBody.forward_to_docker_bridge = !!forward_to_docker_bridge;
             }
             const res = await fetchJSON(`${apiBase}/interfaces/add`, {
               method: "POST",
@@ -3552,7 +3628,7 @@
             icon.dispatchEvent(new Event("mouseleave"))
           );
         });
-        
+
         // Also initialize tooltips for status pills with data-help
         const pills = scope.querySelectorAll(".status-pill[data-help]");
         pills.forEach((pill) => {
@@ -3621,7 +3697,13 @@
       }
       if (btnQrPeer)
         btnQrPeer.addEventListener("click", () => {
-          const name = peerDetailTitle.textContent.trim();
+          const name =
+            peerDetailTitle &&
+            peerDetailTitle.dataset &&
+            peerDetailTitle.dataset.peerName
+              ? peerDetailTitle.dataset.peerName
+              : currentPeerName ||
+                (peerDetailTitle ? peerDetailTitle.textContent.trim() : "");
           if (!name || name === "Peer") {
             showToast("Select a peer first", false);
             return;
@@ -3819,7 +3901,7 @@
             loadInterfaces();
           } catch (_) {}
         }, 5000);
-        
+
         // Initialize tooltips on page load
         if (typeof initHelpTooltips === "function") {
           try {
@@ -3852,12 +3934,12 @@
         if (peersContainerEl) peersContainerEl.innerHTML = "";
         const pill = document.getElementById("ifaceActivePill");
         if (pill) pill.style.display = "none";
-  const dnsP = document.getElementById("ifaceDnsPill");
-  if (dnsP) dnsP.style.display = "none";
-  const dockP = document.getElementById("ifaceDockerPill");
-  if (dockP) dockP.style.display = "none";
-  const gwP = document.getElementById("ifaceGatewayPill");
-  if (gwP) gwP.style.display = "none";
+        const dnsP = document.getElementById("ifaceDnsPill");
+        if (dnsP) dnsP.style.display = "none";
+        const dockP = document.getElementById("ifaceDockerPill");
+        if (dockP) dockP.style.display = "none";
+        const gwP = document.getElementById("ifaceGatewayPill");
+        if (gwP) gwP.style.display = "none";
         const currentLabel = document.getElementById("current-interface-label");
         if (currentLabel) currentLabel.textContent = "";
         // Reset state

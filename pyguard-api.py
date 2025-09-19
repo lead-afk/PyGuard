@@ -655,7 +655,13 @@ def api_init_interface(req: InitInterfaceReq, _=Depends(require_jwt)):
         raise HTTPException(status_code=400, detail="Invalid interface name")
     # Reuse core init (prints to stdout; ignore). We don't want CLI printouts; so just call.
     init_server(
-        req.interface, port=req.port, network=req.network, public_ip=req.public_ip, allow_vpn_gateway=req.allow_vpn_gateway, enable_dns_service=req.enable_dns_service, forward_to_docker_bridge=req.forward_to_docker_bridge
+        req.interface,
+        port=req.port,
+        network=req.network,
+        public_ip=req.public_ip,
+        allow_vpn_gateway=req.allow_vpn_gateway,
+        enable_dns_service=req.enable_dns_service,
+        forward_to_docker_bridge=req.forward_to_docker_bridge,
     )
     d = load_data(req.interface)
     if not d.get("server").get("private_key"):
@@ -1303,7 +1309,10 @@ def api_peer_qr(interface: str, peer: str, _=Depends(require_jwt)):
     import subprocess, base64, tempfile
 
     text_cfg = generate_peer_config(interface, peer)
+    print("Generating QR for peer config:", peer, "on interface:", interface)
+    print(text_cfg)
     if text_cfg is None:
+        print("No config found")
         raise HTTPException(status_code=404, detail="Peer not found")
     # Use qrencode to stdout (-o -)
     try:
