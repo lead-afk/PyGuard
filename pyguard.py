@@ -182,6 +182,7 @@ def list_interfaces(as_json: bool = False, print_output: bool = False):  # ???
                     "active": active,
                     "launch_on_start": data.get("launch_on_start", False),
                     "dns_service": data.get("dns_service", False),
+                    "enabled": data.get("launch_on_start", False),
                 }
             )
         except Exception:
@@ -2150,7 +2151,6 @@ def update_config(interface: str, target: str, parameter: str, value: str):
         data["server"]["dns"] = value
         save_data(interface, data)
         print(f"DNS updated: {value}")
-        generate_config(interface, data)
         return
     if target in ("public-ip", "host", "endpoint-host"):
         data["server"]["public_ip"] = value
@@ -2166,7 +2166,7 @@ def update_config(interface: str, target: str, parameter: str, value: str):
             data["dns_service"] = False
             print("DNS service disabled (peer configs will use custom DNS)")
         save_data(interface, data)
-        generate_config(interface, data, non_critical_change=True)
+        generate_config(interface, data)
         return
     if target == "forward_to_docker_bridge":
         if value.lower() in ("1", "true", "yes", "on", "enable", "enabled"):

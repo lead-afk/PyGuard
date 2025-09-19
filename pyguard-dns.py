@@ -8,6 +8,7 @@ import socket
 import struct
 import threading
 import ipaddress
+import time
 from pyguard import (
     BASE_DATA_DIR,
     list_interfaces,
@@ -169,6 +170,8 @@ def build_dns_response(data, records, upstream_dns="1.1.1.1"):
 
 class DNSServer:
     def __init__(self, ip: str, records: dict[str, str], upstream_dns: str = "1.1.1.1"):
+        print(f"Starting DNS server on {ip} with upstream DNS {upstream_dns}")
+        print(f"Initial DNS records: {records}")
         self.ip = ip
         # self.ip = "0.0.0.0"
         self.records = records
@@ -241,9 +244,26 @@ def reload_dns_config(specific_iface=None):
 
             if specific_iface and specific_iface != interface:
                 continue
-            if not iface.get("active", False):
-                print(f"Interface {interface} is not active, skipping.")
+            if not iface.get("enabled", False):
+                print(f"Interface {interface} is not enabled, skipping.")
                 continue
+
+            if iface.get("enabled", False) and not iface.get("active", False):
+                count = 0
+                while count < 5:
+                    if is_interface_active(interface):
+                        print(f"Interface {interface} is now active.")
+                        break
+                    print(
+                        f"Interface {interface} is not yet active, waiting 2 seconds..."
+                    )
+                    reload_lock.release()
+                    time.sleep(2)
+                    reload_lock.acquire()
+                    count += 1
+                if count == 5:
+                    print(f"Interface {interface} is still not active, skipping.")
+                    continue
 
             data = load_data(interface)
 
@@ -262,7 +282,7 @@ def reload_dns_config(specific_iface=None):
 
             print(f"Interface {interface} DNS records: {records}")
 
-            dns = process_dns_field(data.get("server", {}).get("dns", "1.1.1.1"))
+            dns = process_dns_field(data.get("server", {}).get("dns", "1.1.1.1"), data)
             ip = data.get("server", {}).get("ip")
 
             if network in active_listeners:
@@ -315,14 +335,11 @@ def main():
     observer.schedule(event_handler, path=BASE_DATA_DIR, recursive=True)
     observer.start()
 
-    while True:
-        try:
-            pass
-        except KeyboardInterrupt:
-            break
-
-    observer.stop()
-    observer.join()
+    try:
+        observer.join()  # blocks until observer is stopped
+    except KeyboardInterrupt:
+        observer.stop()
+        observer.join()
 
 
 if __name__ == "__main__":
