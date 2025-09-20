@@ -2867,6 +2867,32 @@
         // show immediately (no loading fetch needed)
         editInterfaceModalMount.innerHTML = buildEditInterfaceModal({}, false);
         editInterfaceModalMount.style.display = "block";
+        // Add DNS help tooltip next to the DNS field and adjust placeholder (explains special 'host')
+        try {
+          const dnsLabel = editInterfaceModalMount.querySelector(
+            'label[for="eimDNS"]'
+          );
+          if (dnsLabel && !dnsLabel.querySelector(".help-icon")) {
+            const span = document.createElement("span");
+            span.className = "help-icon";
+            span.textContent = "?";
+            span.setAttribute(
+              "data-help",
+              "DNS server for peers and upstream DNS for pyguard-dns. Can be an IP (e.g. 1.1.1.1) or 'host'. 'host' means that depending on mode in which pyguard is running, it will either use the host's DNS (if running on bare metal), if integrated DNS service is enabled (see below) then the pyguard-dns will use DNS hosted on host (e.g. Pihole in another container), otherwise it will use public DNS by default 1.1.1.1;"
+            );
+            // Put the icon inside the label so it stays on the same line
+            span.style.marginLeft = "6px";
+            dnsLabel.appendChild(span);
+          }
+          const dnsInput = editInterfaceModalMount.querySelector("#eimDNS");
+          if (
+            dnsInput &&
+            typeof dnsInput.placeholder === "string" &&
+            !/\bhost\b/.test(dnsInput.placeholder)
+          ) {
+            dnsInput.placeholder = "e.g. 1.1.1.1 or host";
+          }
+        } catch (_) {}
         // Initialize help tooltips for newly injected content
         if (typeof initHelpTooltips === "function") {
           try {

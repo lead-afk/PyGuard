@@ -255,15 +255,16 @@ After container start, create an admin user (if not persisted) then visit `http:
 ---
 
 ## Exporting a ready-to-use Docker image
+
 If you want to hand off a single Docker image file so others can run PyGuard without cloning this repo, export the built image as a tar.gz and share it.
 
-1) Build the image (if not already):
+1. Build the image (if not already):
 
 ```fish
 docker build -t pyguard:latest -f docker/Dockerfile.wg-go .
 ```
 
-2) Export the image using the helper script (creates a compressed tarball and checksum):
+2. Export the image using the helper script (creates a compressed tarball and checksum):
 
 ```fish
 chmod +x scripts/export_docker_image.sh
@@ -272,14 +273,14 @@ scripts/export_docker_image.sh pyguard:latest
 
 This produces files like `pyguard-latest-YYYYMMDD.tar.gz` and `pyguard-latest-YYYYMMDD.tar.gz.sha256` in the current directory.
 
-3) On the receiving machine (no repo required), verify and load:
+3. On the receiving machine (no repo required), verify and load:
 
 ```fish
 sha256sum -c pyguard-latest-*.tar.gz.sha256  # optional integrity check
 docker load -i pyguard-latest-*.tar.gz
 ```
 
-4) Run the container (example):
+4. Run the container (example):
 
 ```fish
 docker run -d \
@@ -297,6 +298,7 @@ docker run -d \
 ```
 
 Notes:
+
 - Adjust the UDP WireGuard port mapping (51820) if you later configure a different server port.
 - The first run will auto-create a default `wg0` interface if none exist (set `PYGUARD_AUTOCREATE=0` to disable).
 - Architecture must match (e.g., build on amd64 if you’ll run on amd64; use a multi-arch build if needed).
