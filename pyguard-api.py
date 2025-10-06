@@ -60,6 +60,18 @@ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret_key_change_me")
 ACCESS_TOKEN_EXP_SECONDS = 60 * 15
 REFRESH_TOKEN_EXP_SECONDS = 60 * 60 * 24
 
+# Web UI port (for convenience when running via `python pyguard-api.py`)
+def _parse_port(val: str | None, default: int = 6656) -> int:
+    try:
+        if not val:
+            return default
+        p = int(val)
+        if 1 <= p <= 65535:
+            return p
+    except Exception:
+        pass
+    return default 
+
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("pyguard-api")
 
@@ -98,10 +110,10 @@ else:
 # For convenience also allow common local dev hosts/ports unless user provided explicit list.
 _allow_origin_regex = None
 if _allow_origins == _default_allowed_origins:
-    # Accept any port on 127.0.0.1 / localhost and 6656 on 0.0.0.0 and 10.0.0.x during development.
+    # Accept any port on 127.0.0.1 / localhost and the configured WEBUI_PORT on 0.0.0.0 and 10.0.0.x during development.
     # Note: Use PYGUARD_CORS_ORIGINS env var to override precisely in production.
     _allow_origin_regex = (
-        r"http://((127\.0\.0\.1|localhost):\d+|(0\.0\.0\.0|10\.0\.0\.[0-9]{1,3}):6656)"
+    r"http://((127\.0\.0\.1|localhost)(:\d+)?|(0\.0\.0\.0|10\.0\.0\.[0-9]{1,3})(:\d+)?)"
     )
 
 app.add_middleware(
@@ -1331,3 +1343,53 @@ def api_peer_qr(interface: str, peer: str, _=Depends(require_jwt)):
         )
     b64 = base64.b64encode(proc.stdout).decode()
     return {"peer": peer, "interface": interface, "qr_png_base64": b64}
+
+# ---------------- Convenience launcher -----------------
+
+def help_text():
+    return """PyGuard API
+Usage: python -m pyguard-api [options]
+Options:
+    -h, --host <host>         Host to bind (default: 0.0.0.0)
+    -p, --port <port>         Port to bind (default: 8000)
+    -r, --reload              Enable auto-reload (default: False)
+    --help                    Show this help message
+Environment variables:
+    PYGUARD_WEBUI_PORT        Port to bind (overrides -p)
+    PYGUARD_WEBUI_HOST        Host to bind (overrides -h)
+    
+Uvicorn launch
+    python -m uvicorn pyguard-api:app --host 0.0.0.0 --port 6656
+"""
+
+if __name__ == "__main__":
+    # Allow simple: python pyguard-api.py
+    import uvicorn
+
+    host = os.getenv("PYGUARD_WEBUI_HOST", "0.0.0.0")
+    port = _parse_port(os.getenv("PYGUARD_WEBUI_PORT", "6656"))
+    
+    reload = False
+    for i, arg in enumerate(sys.argv):
+        if arg in ("--reload", "-r"):
+            reload = True
+        if arg in ("-h", "--host"):
+            try:
+                host = sys.argv[i + 1]
+            except Exception:
+                help_text()
+                sys.exit(1)
+        if arg in ("-p", "--port"):
+            try:
+                port = int(sys.argv[i + 1])
+            except Exception:
+                help_text()
+                sys.exit(1)
+    log.info(
+        "Starting PyGuard API via __main__ host=%s port=%s (set PYGUARD_WEBUI_PORT to override)",
+        host,
+        port,
+    )
+    launch_msg = f"PyGuard API running on http://{host}:{port}/"
+    print(launch_msg)
+    uvicorn.run("pyguard-api:app", host=host, port=port, reload=reload)

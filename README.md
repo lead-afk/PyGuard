@@ -7,13 +7,13 @@ Self‑hosted WireGuard management toolkit that bundles:
 - An optional lightweight authoritative / forwarding DNS service (`pyguard-dns.py`) that can answer interface‑local hostnames and forward the rest (`WIP`)
 - A Docker image (userspace `wireguard-go`) for portable deployments where kernel modules are unavailable
 
-Status: early (alpha) – APIs & data layout may still change. Feedback / issues welcome.
+Status: early (alpha) - APIs & data layout may still change. Feedback / issues welcome.
 
 ---
 
 ## Highlights
 
-- Pure Python management (no external DB) – state stored as JSON per interface in `/etc/pyguard/<iface>.conf`
+- Pure Python management (no external DB) - state stored as JSON per interface in `/etc/pyguard/<iface>.conf`
 - Automatic interface bootstrap (keys, config render, systemd service) and launch orchestration
 - Peer lifecycle: add, list, revoke, regenerate configs + optional QR render (uses `qrencode`)
 - Intelligent defaults: next available port, network and IP auto‑selection avoiding collisions
@@ -39,9 +39,9 @@ data/ (example)         # Example users / logs (production uses /etc/pyguard)
 
 Runtime critical directories (created automatically if missing):
 
-- `/etc/pyguard` – state, secrets, users, interface JSON (`<iface>.conf`), `secret.key`
-- `/etc/wireguard` – rendered WireGuard configs consumed by `wg-quick`
-- `/var/log/pyguard` – log outputs (in container / when supervised)
+- `/etc/pyguard` - state, secrets, users, interface JSON (`<iface>.conf`), `secret.key`
+- `/etc/wireguard` - rendered WireGuard configs consumed by `wg-quick`
+- `/var/log/pyguard` - log outputs (in container / when supervised)
 
 ---
 
@@ -64,7 +64,7 @@ Requirements:
 
 - Python 3.11+
 - Root privileges (WireGuard + writing to `/etc`)
-- WireGuard tools (`wg`, `wg-quick`) – auto install attempted on Debian/Ubuntu
+- WireGuard tools (`wg`, `wg-quick`) - auto install attempted on Debian/Ubuntu
 
 ```bash
 git clone https://github.com/lead-afk/PyGuard.git
@@ -80,7 +80,7 @@ sudo ./pyguard.py wg0 enable # bring the interface on system boot
 uvicorn pyguard-api:app --host 127.0.0.1 --port 6656
 ```
 
-Visit: http://127.0.0.1:6656 (after creating an admin user – see below).
+Visit: http://127.0.0.1:6656 (after creating an admin user - see below).
 
 ---
 
@@ -159,31 +159,31 @@ Security Notes:
 
 Top‑level commands:
 
-- `pyguard help | -h | --help` – show extended help (includes examples)
-- `pyguard list [--json]` – list all interfaces (name, port, network, peers, active)
-- `pyguard init [<iface>] [--port N] [--network CIDR] [--public-ip HOST]` – create new interface (auto picks defaults if omitted)
-- `pyguard delete <iface> [<iface2> ...]` – delete one or more interfaces (state + config + systemd unit)
-- `pyguard launchAll` – start every interface with `launch_on_start=true`
-- `pyguard stopAll` – stop all active interfaces
+- `pyguard help | -h | --help` - show extended help (includes examples)
+- `pyguard list [--json]` - list all interfaces (name, port, network, peers, active)
+- `pyguard init [<iface>] [--port N] [--network CIDR] [--public-ip HOST]` - create new interface (auto picks defaults if omitted)
+- `pyguard delete <iface> [<iface2> ...]` - delete one or more interfaces (state + config + systemd unit)
+- `pyguard launchAll` - start every interface with `launch_on_start=true`
+- `pyguard stopAll` - stop all active interfaces
 
 Interface‑scoped commands (first positional arg is the interface):
 
-- `pyguard <iface> start | stop | status` – bring interface up/down (wg-quick) or show live peer stats
-- `pyguard <iface> enable | disable` – toggle systemd oneshot service + `launch_on_start`
-- `pyguard <iface> rename <new_iface>` – rename interface (state file, wg config, systemd unit)
-- `pyguard <iface> add <peer_name> [<ip>]` – add peer (auto next free IP if not supplied)
-- `pyguard <iface> remove <peer_name|index>` – remove peer by name or numeric index (from list)
-- `pyguard <iface> list [--json]` – list peers (IP, handshake age, transfer, endpoint)
-- `pyguard <iface> show server [--json]` – show server config summary
-- `pyguard <iface> show <peer> [--save|--qr|--save-qr|--json]` – render client config; optionally save, display QR, save QR PNG
-- `pyguard <iface> update <server-param> <value>` – update server setting (port, dns, public-ip, network)
-- `pyguard <iface> update <peer> <param> <value>` – update peer (allowed-ips, ip, rename) or `rotate-keys`
-- `pyguard <iface> dns_service <enable|disable>` – toggle built‑in DNS flag
-- `pyguard <iface> allow_vpn_gateway <enable|disable>` – allow server to act as full gateway for peers
-- `pyguard <iface> forward_to_docker_bridge <enable|disable>` – enable Docker bridge forwarding (use mainly inside container)
-- `pyguard <iface> custom add|list|delete up|down ...` – manage additional PostUp/PostDown commands
-- `pyguard <iface> delete interface` – delete this single interface (alias to top‑level delete form)
-- `pyguard <iface> help` – show help
+- `pyguard <iface> start | stop | status` - bring interface up/down (wg-quick) or show live peer stats
+- `pyguard <iface> enable | disable` - toggle systemd oneshot service + `launch_on_start`
+- `pyguard <iface> rename <new_iface>` - rename interface (state file, wg config, systemd unit)
+- `pyguard <iface> add <peer_name> [<ip>]` - add peer (auto next free IP if not supplied)
+- `pyguard <iface> remove <peer_name|index>` - remove peer by name or numeric index (from list)
+- `pyguard <iface> list [--json]` - list peers (IP, handshake age, transfer, endpoint)
+- `pyguard <iface> show server [--json]` - show server config summary
+- `pyguard <iface> show <peer> [--save|--qr|--save-qr|--json]` - render client config; optionally save, display QR, save QR PNG
+- `pyguard <iface> update <server-param> <value>` - update server setting (port, dns, public-ip, network)
+- `pyguard <iface> update <peer> <param> <value>` - update peer (allowed-ips, ip, rename) or `rotate-keys`
+- `pyguard <iface> dns_service <enable|disable>` - toggle built‑in DNS flag
+- `pyguard <iface> allow_vpn_gateway <enable|disable>` - allow server to act as full gateway for peers
+- `pyguard <iface> forward_to_docker_bridge <enable|disable>` - enable Docker bridge forwarding (use mainly inside container)
+- `pyguard <iface> custom add|list|delete up|down ...` - manage additional PostUp/PostDown commands
+- `pyguard <iface> delete interface` - delete this single interface (alias to top‑level delete form)
+- `pyguard <iface> help` - show help
 
 Notes & behavior:
 
@@ -200,9 +200,9 @@ Peer configs live only in JSON state + generated wireguard conf fragments (rende
 
 The FastAPI app (`pyguard-api.py`) serves:
 
-- `/login` – form login (sets access + refresh cookies)
-- `/dashboard` – (protected) UI views
-- JSON endpoints for interface & peer management (require JWT) – paths may evolve; inspect code for current routes.
+- `/login` - form login (sets access + refresh cookies)
+- `/dashboard` - (protected) UI views
+- JSON endpoints for interface & peer management (require JWT) - paths may evolve; inspect code for current routes.
 
 Auth model:
 
@@ -237,9 +237,11 @@ docker compose -f docker-compose.wg-go.yml up --build -d
 
 Environment variables (example compose):
 
-- `PYGUARD_AUTOCREATE=1` – auto create `wg0` on first run
-- `PYGUARD_EXTRA_INTERFACES=wg1,wg2` – pre-create additional interfaces
-- `PYGUARD_WEB_DEBUG=1` – enable FastAPI debug
+- `PYGUARD_AUTOCREATE=1` - auto create `wg0` on first run
+- `PYGUARD_EXTRA_INTERFACES=wg1,wg2` - pre-create additional interfaces
+- `PYGUARD_WEB_DEBUG=1` - enable FastAPI debug
+- `PYGUARD_WEBUI_PORT=6656` - Default listen port for the API/Web UI when launching with `python pyguard-api.py` (or if a process manager shells the module). Override at runtime with CLI flag `--port` (which always wins) or map externally via Docker `-p HOST:CONTAINER`.
+- `PYGUARD_WEBUI_HOST=0.0.0.0` - Bind address when using the built‑in launcher. Set to `127.0.0.1` to restrict to localhost. CLI flag `--host` overrides this. (When invoking uvicorn manually, the uvicorn `--host/--port` you pass there take precedence.)
 
 Expose / persist data by uncommenting volume mounts in `docker-compose.wg-go.yml`:
 
@@ -307,9 +309,9 @@ Notes:
 
 ## Configuration & Settings
 
-`/etc/pyguard/settings` – simple key=value lines (auto created). Current enum:
+`/etc/pyguard/settings` - simple key=value lines (auto created). Current enum:
 
-- `allow_command_apply` (bool) – if true, API endpoints may apply firewall (UFW) rules.
+- `allow_command_apply` (bool) - if true, API endpoints may apply firewall (UFW) rules.
 
 Per interface JSON structure (simplified):
 
@@ -341,7 +343,7 @@ Per interface JSON structure (simplified):
 - Always run the public API behind TLS / reverse proxy (Caddy, Nginx, Traefik)
 - Limit API binding to localhost or admin network; use firewall rules
 - Rotate admin passwords periodically; bcrypt with per‑hash salt is used
-- Protect `/etc/pyguard/secret.key` (permissions 600) – JWT signing key
+- Protect `/etc/pyguard/secret.key` (permissions 600) - JWT signing key
 - Consider setting more restrictive CORS origins in production
 - Userspace `wireguard-go` is slower than kernel WireGuard; prefer kernel where possible
 
@@ -399,7 +401,7 @@ sudo python pyguard.py wg0 add laptop
 sudo python pyguard.py wg0 start
 ```
 
-Code style: (lightweight) – please open a PR; formatting tools can be introduced later.
+Code style: (lightweight) - please open a PR; formatting tools can be introduced later.
 
 ---
 
