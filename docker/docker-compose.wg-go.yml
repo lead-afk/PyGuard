@@ -17,10 +17,10 @@ services:
       # - PYGUARD_EXTRA_INTERFACES=wg1,wg2
     ports:
       - "6656:6656/tcp"
-      - "51825:51825/udp"
+      - "51823:51823/udp"
       - "54:53/udp"
-    #volumes:
-    #  - ../data/pyguard:/etc/pyguard
-    #  - ../data/wireguard:/etc/wireguard
-    #  - ../data/logs:/var/log/pyguard
+    volumes:
+      - ../test/pyguard:/etc/pyguard
+      - ../test/wireguard:/etc/wireguard
+      - ../test/logs:/var/log/pyguard
     restart: unless-stopped

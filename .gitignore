@@ -133,3 +133,4 @@ env/
 
 # data files
 data/users.json
+test/

@@ -356,6 +356,31 @@ Per interface JSON structure (simplified):
 
 ---
 
+## Resetting Web UI Password
+
+To reset the admin password, use the provided script.
+
+**Paths:**
+
+- In the repository: `repo_dir/scripts/reset-admin.py`
+- Inside the container: `/app/scripts/reset-admin.py`
+
+> **Note:** `reset-admin.py` requires root privileges. Add `sudo` if needed.
+
+**Usage:**
+
+Interactive prompt:
+
+```bash
+python scripts/reset-admin.py
+```
+
+Non interactive prompt:
+
+```bash
+python scripts/reset-admin.py <new_password>
+```
+
 ## Development
 
 ```bash
@@ -392,19 +417,54 @@ Code style: (lightweight) – please open a PR; formatting tools can be introduc
 
 ## License
 
-- Currently unlicensed (all rights reserved) unless a LICENSE file is added. Open an issue if you need explicit licensing terms.
+PyGuard is currently provided under a provisional Non‑Commercial Use License (free for personal / educational / research / internal non‑profit or non‑revenue use). A formal standard license may be adopted later; until then these terms apply:
+
+Allowed WITHOUT prior permission (NON‑COMMERCIAL ONLY):
+
+- Personal use (home lab, hobby projects)
+- Educational / classroom / academic research use
+- Internal evaluation or internal tooling inside an organization where PyGuard itself is not sold or monetized
+- Forking, modifying, and deploying internally (must retain this section and copyright notice)
+- Sharing unmodified source copies (retain notices)
+
+NOT allowed without prior written permission (i.e. needs a commercial license / approval):
+
+- Offering PyGuard or a substantial derivative as a paid or revenue‑generating hosted service (SaaS / MSP / hosting bundles)
+- Bundling PyGuard (original or modified) inside a commercial product, distribution, image or appliance that you sell or charge for
+- Selling access, licenses, or support contracts specifically for PyGuard or a derivative
+- Using PyGuard primarily to provide a commercial VPN service whose value proposition depends on PyGuard itself
+
+Attribution Requirements:
+
+- Keep existing copyright notices and this license section in any forks or redistributions
+- Clearly note material modifications (changelog / commit history is sufficient)
+
+Commercial / broader rights:
+
+- Open an issue or reach out to request a commercial / broader-use license if your intended use is outside the allowed scope
+
+Future Licensing Intent:
+
+- The project owner may transition to a recognized open source license (e.g. Apache 2.0 / AGPL / similar) after further maturation; any change will be announced in release notes / tags. Until then, these provisional terms govern.
+
+Disclaimer:
+
+- Provided "AS IS" without any warranty (express or implied). You assume all risk in deploying or operating this software. Security review recommended before production exposure.
+
+If any clause here is unclear, please open an issue for clarification.
 
 ---
 
 ## Disclaimer
 
-- Use at your own risk. Review code & security posture before exposing to untrusted networks.
+- This software is provided "as is" and without any warranty. Use at your own risk.
+- Review the code and security posture before deploying or exposing it to untrusted networks.
+- Always host the web UI behind an HTTPS proxy or reverse proxy with TLS termination.
 
 ## Special thanks
 
 - K.P.
 - B.A.
-- Copilot
 
 ## PS
 
