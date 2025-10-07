@@ -25,6 +25,13 @@ Status: early (alpha) - APIs & data layout may still change. Feedback / issues w
 
 ---
 
+## Web UI
+
+`Login`
+![Login page](data/images/login.png)
+`Web UI`
+![Web UI](data/images/webui.png)
+
 ## Repository Layout
 
 ```
@@ -338,19 +345,19 @@ Per interface JSON structure (simplified):
 
 ---
 
-## Access Host from Inside Container
+## Access Between Host and Peers from Inside Container
 
 There are currently **4 methods** to enable host access from within a container:
 
 1. **Forward to Docker Bridge**  
-   Enable IP forwarding to the Docker bridge network.
+   Enable IP forwarding to the Docker bridge network, a `pyguard` provided setting.
 
-   - ✅ Allows peers to reach the host via ping or similar.
+   - ✅ Allows peers to reach the host.
    - ⚠️ The host **cannot initiate connections** to peers but will be reachable on WireGuard network as **relay**.
 
 2. **Use `network_mode: host` in Docker Compose**
 
-   - ✅ Gives container full access to host network interfaces.
+   - ✅ Gives container full access to host network interfaces, fixes host <-> peers issue.
    - ⚠️ **Will break** `pyguard-dns` or other service bound to port 53 unless you reconfigure them.
 
 3. **Create a Dedicated Peer Entry for the Host**  
