@@ -60,6 +60,7 @@ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret_key_change_me")
 ACCESS_TOKEN_EXP_SECONDS = 60 * 15
 REFRESH_TOKEN_EXP_SECONDS = 60 * 60 * 24
 
+
 # Web UI port (for convenience when running via `python pyguard-api.py`)
 def _parse_port(val: str | None, default: int = 6656) -> int:
     try:
@@ -70,7 +71,8 @@ def _parse_port(val: str | None, default: int = 6656) -> int:
             return p
     except Exception:
         pass
-    return default 
+    return default
+
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("pyguard-api")
@@ -112,9 +114,7 @@ _allow_origin_regex = None
 if _allow_origins == _default_allowed_origins:
     # Accept any port on 127.0.0.1 / localhost and the configured WEBUI_PORT on 0.0.0.0 and 10.0.0.x during development.
     # Note: Use PYGUARD_CORS_ORIGINS env var to override precisely in production.
-    _allow_origin_regex = (
-    r"http://((127\.0\.0\.1|localhost)(:\d+)?|(0\.0\.0\.0|10\.0\.0\.[0-9]{1,3})(:\d+)?)"
-    )
+    _allow_origin_regex = r"http://((127\.0\.0\.1|localhost)(:\d+)?|(0\.0\.0\.0|10\.0\.0\.[0-9]{1,3})(:\d+)?)"
 
 app.add_middleware(
     CORSMiddleware,
@@ -868,7 +868,7 @@ def api_get_next_available_ip(interface: str, _=Depends(require_jwt)):
 
 @app.get("/info/default_gateway")
 def api_get_default_gateway(_=Depends(require_jwt)):
-    ip, name = get_local_gateway()
+    ip, name, _, _ = get_local_gateway()
     if not ip or not name:
         raise HTTPException(status_code=404, detail="No gateway found")
     return {"gateway_ip": ip, "gateway_name": name}
@@ -1006,7 +1006,7 @@ def api_allow_route_vpn_gateway(interface: str, _=Depends(require_jwt)):
     if not command_exists("ufw"):
         raise HTTPException(status_code=400, detail="ufw command not found")
 
-    gateway_ip, gateway_name = get_local_gateway()
+    gateway_ip, gateway_name, _, _ = get_local_gateway()
     if not gateway_ip:
         raise HTTPException(status_code=400, detail="No gateway found")
 
@@ -1344,7 +1344,9 @@ def api_peer_qr(interface: str, peer: str, _=Depends(require_jwt)):
     b64 = base64.b64encode(proc.stdout).decode()
     return {"peer": peer, "interface": interface, "qr_png_base64": b64}
 
+
 # ---------------- Convenience launcher -----------------
+
 
 def help_text():
     return """PyGuard API
@@ -1362,13 +1364,14 @@ Uvicorn launch
     python -m uvicorn pyguard-api:app --host 0.0.0.0 --port 6656
 """
 
+
 if __name__ == "__main__":
     # Allow simple: python pyguard-api.py
     import uvicorn
 
-    host = os.getenv("PYGUARD_WEBUI_HOST", "0.0.0.0")
+    host = os.getenv("PYGUARD_WEBUI_HOST", str(get_local_gateway()[3]))
     port = _parse_port(os.getenv("PYGUARD_WEBUI_PORT", "6656"))
-    
+    print("Trying to launch PyGuard API on host:", host, "port:", port)
     reload = False
     for i, arg in enumerate(sys.argv):
         if arg in ("--reload", "-r"):

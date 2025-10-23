@@ -814,6 +814,15 @@ def get_next_ip(interface: str, custom_network: str = None):
     raise Exception("No available IPs in the network")
 
 
+def _is_network(ip_network: str) -> bool:
+
+    try:
+        ipaddress.ip_network(ip_network)
+        return True
+    except ValueError:
+        return False
+
+
 def get_local_gateway():  # TODO  what if in docker but network mode is host?
     result = subprocess.run(
         ["ip", "route"],
@@ -821,21 +830,36 @@ def get_local_gateway():  # TODO  what if in docker but network mode is host?
         text=True,
         check=False,
     )
+    gateway = "172.16.0.1"
+    name = "not-found"
+    net = "172.16.0.0/16"
+    default_ip = "172.16.0.2"
+    found = False
     lines = result.stdout.splitlines()
     print(lines)
     for line in lines:
+        parts = line.split()
         line = line.strip()
         if line.startswith("default via"):
-            parts = line.split()
             try:
                 gateway = ipaddress.ip_address(parts[2])
                 name = parts[4]
                 print(f"Detected local gateway IP: {gateway}")
-                return str(gateway), str(name)
+                found = True
+                continue
             except Exception:
                 continue
-    print("Warning: could not determine docker bridge IP, defaulting to 172.16.0.1")
-    return "172.16.0.1", "not-found"
+
+        if found and _is_network(parts[0]):
+
+            if ipaddress.ip_address(gateway) in ipaddress.ip_network(parts[0]):
+                net = parts[0]
+                try:
+                    default_ip = list(ipaddress.ip_network(net).hosts())[1]
+                except Exception:
+                    continue
+
+    return str(gateway), str(name), str(net), str(default_ip)
 
 
 def get_used_network_names():
@@ -1465,7 +1489,7 @@ ListenPort = {data['server']['port']}
         )
 
     if data.get("forward_to_docker_bridge"):
-        ip, _ = get_local_gateway()
+        ip, _, _, _ = get_local_gateway()
         if not (os.getenv("PYGUARD_IN_DOCKER") == "1"):
             print("This is not running inside a Docker container.")
 
@@ -2572,7 +2596,7 @@ def main():
                 update_config(interface, "dns_service", "dns_service", "disable")
         elif command == "forward_to_docker_bridge":
             if not "-y" in args and not os.getenv("PYGUARD_IN_DOCKER") == "1":
-                ip, name = get_local_gateway()
+                ip, name, _, _ = get_local_gateway()
                 print(red("Warning this will likely break stuff outside of Docker!"))
                 print(
                     yellow(
