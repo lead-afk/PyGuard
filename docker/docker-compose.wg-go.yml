@@ -14,6 +14,9 @@ services:
       - PYGUARD_WEB_DEBUG=1
       # Auto-create a default wg0 interface on first start (1=enable, 0=disable)
       - PYGUARD_AUTOCREATE=1
+      # Allows peers to access web interface from internal network
+      #- PYGUARD_ALLOW_WEBUI_INTERNAL_ACCESS=1
+      # Web interface port and host (default host is the local gateway IP)
       #- PYGUARD_WEBUI_PORT=6616
       #- PYGUARD_WEBUI_HOST="0.0.0.0"
       # Optionally pre-create additional interfaces (comma-separated). Leave empty or remove if not needed.

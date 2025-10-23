@@ -1370,6 +1370,9 @@ if __name__ == "__main__":
     import uvicorn
 
     host = os.getenv("PYGUARD_WEBUI_HOST", str(get_local_gateway()[3]))
+    allow_internal_access = os.getenv("PYGUARD_ALLOW_INTERNAL_ACCESS", "0") == "1"
+    if allow_internal_access:
+        host = "0.0.0.0"
     port = _parse_port(os.getenv("PYGUARD_WEBUI_PORT", "6656"))
     print("Trying to launch PyGuard API on host:", host, "port:", port)
     reload = False
