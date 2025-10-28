@@ -1081,13 +1081,17 @@ def stop_all_interfaces():
     interfaces = list_interfaces()
     count = 0
     for iface in interfaces:
-        if iface.get("active"):
-            try:
-                print(f"Stopping interface {iface.get('name')}...")
-                stop_wireguard(iface.get("name"))
-                count += 1
-            except Exception as e:
-                print(f"Failed to stop {iface.get('name')}: {e}")
+        try:
+            if iface.get("active"):
+                try:
+                    print(f"Stopping interface {iface.get('name')}...")
+                    stop_wireguard(iface.get("name"))
+                    count += 1
+                except Exception as e:
+                    print(f"Failed to stop {iface.get('name')}: {e}")
+        except Exception as e:
+            print(f"Error checking interface {iface.get('name')}: {e}")
+            continue
     print(f"Total stopped interfaces: {count}")
 
 
@@ -1184,6 +1188,8 @@ def stop_wireguard(interface: str):
     Raises:
         SystemExit: If the interface cannot be stopped
     """
+    generate_config(interface, restart=False)
+    
     ensure_root()
     if not command_exists("wg-quick"):
         print("wg-quick not found (WireGuard required)")
@@ -1191,7 +1197,7 @@ def stop_wireguard(interface: str):
     if not is_interface_active(interface):
         return
     try:
-        subprocess.run(["wg-quick", "down", interface], check=True)
+        subprocess.run(["wg-quick", "down", interface], check=False)
         print(f"Stopped interface: {interface}")
     except subprocess.CalledProcessError as e:
         print(f"Error stopping: {e}")
@@ -1484,9 +1490,7 @@ ListenPort = {data['server']['port']}
         default_post_up.append(
             f"nft add chain ip {table_name} postrouting_chain {{ type nat hook postrouting priority srcnat \\; policy accept \\; }}"
         )
-        default_post_up.append(
-            f"nft add rule ip {table_name} postrouting_chain ip saddr {network_cidr} counter masquerade"
-        )
+
 
     if data.get("forward_to_docker_bridge"):
         ip, _, _, _ = get_local_gateway()
@@ -1521,6 +1525,11 @@ ListenPort = {data['server']['port']}
     ]
     post_up_cmds = default_post_up + data["server"].get("custom_post_up", [])
     post_down_cmds = default_post_down + data["server"].get("custom_post_down", [])
+    
+    if data.get("allow_vpn_gateway", False):
+        post_up_cmds.append(
+            f"nft add rule ip {table_name} postrouting_chain ip saddr {network_cidr} counter masquerade"
+        )
 
     for cmd in post_up_cmds:
         config += f"PostUp = {cmd}\n"
@@ -1684,7 +1693,7 @@ def rename_interface(interface: str, new_name: str):
 
 
 def generate_config(
-    interface: str, data: dict | None = None, non_critical_change: bool = False
+    interface: str, data: dict | None = None, non_critical_change: bool = False, restart: bool = True
 ):
     """Generate WireGuard configuration file and restart interface if active.
 
@@ -1709,6 +1718,8 @@ def generate_config(
         f.write(cfg)
     os.chmod(cfg_path, stat.S_IRUSR | stat.S_IWUSR)
     print(f"Generated WireGuard config: {cfg_path}")
+    if not restart:
+        return
     try:
         if is_interface_active(interface):
             restart_wg_interface(interface, non_critical_change)

@@ -3,6 +3,28 @@ set -euo pipefail
 
 log() { echo "[entrypoint] $*"; }
 
+CLEANED=0
+SUPERVISOR_PID=""
+
+cleanup() {
+  if [ "$CLEANED" -eq 1 ]; then
+    return
+  fi
+  CLEANED=1
+  log "Stopping all WireGuard interfaces"
+  if ! python /app/pyguard.py stopAll; then
+    log "stopAll command failed"
+  fi
+}
+
+term_handler() {
+  log "Received termination signal"
+  cleanup
+  if [ -n "$SUPERVISOR_PID" ]; then
+    kill -TERM "$SUPERVISOR_PID" 2>/dev/null || true
+  fi
+}
+
 # Ensure /dev/net/tun exists
 if [ ! -e /dev/net/tun ]; then
   log "Creating /dev/net/tun"
@@ -34,4 +56,14 @@ if [ -n "${PYGUARD_EXTRA_INTERFACES:-}" ]; then
 fi
 
 log "Starting supervisord"
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/pyguard.conf
+trap term_handler TERM INT
+
+/usr/bin/supervisord -c /etc/supervisor/conf.d/pyguard.conf &
+SUPERVISOR_PID=$!
+
+wait "$SUPERVISOR_PID"
+EXIT_CODE=$?
+
+cleanup
+
+exit "$EXIT_CODE"
