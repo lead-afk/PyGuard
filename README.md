@@ -25,6 +25,55 @@ Status: early (alpha) - APIs & data layout may still change. Feedback / issues w
 
 ---
 
+## Docker deployment
+
+Requirements:
+
+- Docker with access to /dev/net/tun and NET_ADMIN
+- Firewall allowing UDP 51820 from peers
+
+Compose example:
+
+```yaml
+services:
+  pyguard:
+    image: leadafk/pyguard:latest
+    container_name: pyguard
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    environment:
+      - PYGUARD_WEB_DEBUG=1
+      - PYGUARD_WEBUI_PORT=6656
+      - PYGUARD_ALLOW_INTERNAL_ACCESS=1
+    volumes:
+      - /etc/pyguard:/etc/pyguard
+    restart: unless-stopped
+```
+
+Steps:
+
+1. Create persistent state dir:
+   sudo mkdir -p /etc/pyguard && sudo chmod 700 /etc/pyguard
+2. Start:
+   docker compose up -d
+3. Create admin user:
+   docker exec -it pyguard python /app/scripts/reset-admin.py
+4. Open UI:
+   http://127.0.0.1:6656
+
+Notes:
+
+- Host networking is simplest; if you later enable the built-in DNS on port 53, ensure no host service conflicts.
+- Open UDP 51820 on the host firewall (or change the interface port as needed).
+- Consider setting PYGUARD_WEB_DEBUG=0 in production.
+- Upgrade:
+  docker compose pull && docker compose up -d
+- If avoiding host networking, publish TCP 6656 and UDP 51820 and enable “forward_to_docker_bridge” on the interface for host reachability.
+- If you want to hide the admin page from peers remove PYGUARD_ALLOW_INTERNAL_ACCESS=1
+
 ## Web UI
 
 `Login`
@@ -233,87 +282,6 @@ Benefits:
 
 ---
 
-## Docker Deployment
-
-Userspace WireGuard (no kernel module required):
-
-```bash
-cd docker
-docker compose -f docker-compose.wg-go.yml up --build -d
-```
-
-Environment variables (example compose):
-
-- `PYGUARD_AUTOCREATE=1` - auto create `wg0` on first run
-- `PYGUARD_EXTRA_INTERFACES=wg1,wg2` - pre-create additional interfaces
-- `PYGUARD_WEB_DEBUG=1` - enable FastAPI debug
-- `PYGUARD_WEBUI_PORT=6656` - Default listen port for the API/Web UI when launching with `python pyguard-api.py` (or if a process manager shells the module). Override at runtime with CLI flag `--port` (which always wins) or map externally via Docker `-p HOST:CONTAINER`.
-- `PYGUARD_WEBUI_HOST=0.0.0.0` - Bind address when using the built‑in launcher. Set to `127.0.0.1` to restrict to localhost. CLI flag `--host` overrides this. (When invoking uvicorn manually, the uvicorn `--host/--port` you pass there take precedence.)
-
-Expose / persist data by uncommenting volume mounts in `docker-compose.wg-go.yml`:
-
-```yaml
-		volumes:
-			- ../data/pyguard:/etc/pyguard
-			- ../data/wireguard:/etc/wireguard
-			- ../data/logs:/var/log/pyguard
-```
-
-After container start, create an admin user (if not persisted) then visit `http://HOST:6656`.
-
----
-
-## Exporting a ready-to-use Docker image
-
-If you want to hand off a single Docker image file so others can run PyGuard without cloning this repo, export the built image as a tar.gz and share it.
-
-1. Build the image (if not already):
-
-```fish
-docker build -t pyguard:latest -f docker/Dockerfile.wg-go .
-```
-
-2. Export the image using the helper script (creates a compressed tarball and checksum):
-
-```fish
-chmod +x scripts/export_docker_image.sh
-scripts/export_docker_image.sh pyguard:latest
-```
-
-This produces files like `pyguard-latest-YYYYMMDD.tar.gz` and `pyguard-latest-YYYYMMDD.tar.gz.sha256` in the current directory.
-
-3. On the receiving machine (no repo required), verify and load:
-
-```fish
-sha256sum -c pyguard-latest-*.tar.gz.sha256  # optional integrity check
-docker load -i pyguard-latest-*.tar.gz
-```
-
-4. Run the container (example):
-
-```fish
-docker run -d \
-  --name pyguard \
-  --cap-add NET_ADMIN \
-  --device /dev/net/tun \
-  -p 6656:6656/tcp \
-  -p 51820:51820/udp \
-  -p 53:53/udp \
-  -e PYGUARD_AUTOCREATE=1 \
-  -v pyguard-data:/etc/pyguard \
-  -v wireguard-data:/etc/wireguard \
-  -v pyguard-logs:/var/log/pyguard \
-  pyguard:latest
-```
-
-Notes:
-
-- Adjust the UDP WireGuard port mapping (51820) if you later configure a different server port.
-- The first run will auto-create a default `wg0` interface if none exist (set `PYGUARD_AUTOCREATE=0` to disable).
-- Architecture must match (e.g., build on amd64 if you’ll run on amd64; use a multi-arch build if needed).
-
----
-
 ## Configuration & Settings
 
 `/etc/pyguard/settings` - simple key=value lines (auto created). Current enum:
@@ -443,6 +411,7 @@ Code style: (lightweight) - please open a PR; formatting tools can be introduced
 ## Roadmap / Ideas
 
 - multi users
+- support custom postUp/down commands in webui
 
 ---
 

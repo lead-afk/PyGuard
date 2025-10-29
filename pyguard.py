@@ -854,9 +854,12 @@ def get_local_gateway():  # TODO  what if in docker but network mode is host?
 
             if ipaddress.ip_address(gateway) in ipaddress.ip_network(parts[0]):
                 net = parts[0]
+                
                 try:
-                    default_ip = list(ipaddress.ip_network(net).hosts())[1]
-                except Exception:
+                    if is_ip(parts[8]) and ipaddress.ip_address(parts[8]) in ipaddress.ip_network(net):
+                        default_ip = parts[8]
+                except Exception as e:
+                    print(f"Error processing default IP: {e}")
                     continue
 
     return str(gateway), str(name), str(net), str(default_ip)
